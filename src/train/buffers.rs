@@ -26,8 +26,8 @@ impl TrainingBuffers {
         TrainingBuffers {
             input_buffer: vec![0f32; net.input_size()],
             expected_output_buffer: vec![0f32; net.output_size()],
-            output_buffers: RowBuffer::new_with_row_sizes(0.0, layer_sizes.as_ref()),
-            error_gradient_buffers: RowBuffer::new_with_row_sizes(0.0, layer_sizes.as_ref()),
+            output_buffers: RowBuffer::new_with_row_sizes(0.0, &layer_sizes),
+            error_gradient_buffers: RowBuffer::new_with_row_sizes(0.0, &layer_sizes),
             input_error_buffer: vec![0f32; net.input_size()],
             error_stats: Stats::new(),
             weight_deltas: net.new_zeroed_weight_buffer(),

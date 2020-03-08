@@ -7,7 +7,8 @@ pub struct RowBuffer<T: Copy> {
 #[allow(dead_code)]
 impl<T> RowBuffer<T> where T: Copy {
 
-    pub fn new_with_row_sizes(initial_value: T, row_sizes: &[usize]) -> Self {
+    pub fn new_with_row_sizes(initial_value: T, row_sizes: impl AsRef<[usize]>) -> Self {
+        let row_sizes = row_sizes.as_ref();
         assert!(row_sizes.len() > 0);
         let total_size: usize = row_sizes.iter().sum();
         let buffer: Vec<T> = vec![initial_value; total_size];
@@ -142,15 +143,23 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_row_sizes_types() {
+        RowBuffer::new_with_row_sizes(0f32, vec![1, 2, 3]);
+        RowBuffer::new_with_row_sizes(0f32, &vec![1, 2, 3]);
+        RowBuffer::new_with_row_sizes(0f32, [1, 2, 3]);
+        RowBuffer::new_with_row_sizes(0f32, &[1, 2, 3]);
+    }
+
+    #[test]
     #[should_panic(expected = "assertion failed: row_sizes.len() > 0")]
     fn test_empty_not_allowed() {
-        RowBuffer::new_with_row_sizes(0f32, &Vec::new());
+        RowBuffer::new_with_row_sizes(0f32, Vec::new());
     }
 
     #[test]
     fn test_basics() {
 
-        let mut buf = RowBuffer::new_with_row_sizes(0usize, &vec![1, 0, 10, 2]);
+        let mut buf = RowBuffer::new_with_row_sizes(0usize, vec![1, 0, 10, 2]);
 
         // check for correct structure
         assert_eq!(4, buf.num_rows());

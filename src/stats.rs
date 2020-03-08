@@ -173,23 +173,69 @@ impl ConfusionMatrices {
     }
 
     pub fn get_for_column_index(&self, column_index: usize) -> Option<ConfusionMatrix> {
-        let mut iter = self.matrices.iter();
-        while let Some((col_idx, _, matrix)) = iter.next() {
-            if *col_idx == column_index {
-                return Some(matrix.clone());
+        for (col_idx, _, matrix) in &self.matrices {
+            if column_index == *col_idx {
+                return Some(matrix.clone())
             }
         }
         None
     }
 
     pub fn get_for_column_name(&self, column_name: &str) -> Option<ConfusionMatrix> {
-        let mut iter = self.matrices.iter();
-        while let Some((_, name, matrix)) = iter.next() {
-            if name.is_some() && name.as_ref().map(String::as_str) == Some(column_name) {
-                return Some(matrix.clone());
+        for (_, ref name, matrix) in &self.matrices {
+            if let Some(name) = name {
+                if name.as_str() == column_name {
+                    return Some(matrix.clone());
+                }
             }
         }
         None
+    }
+
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_stats() {
+
+        let mut s = Stats::new();
+
+        assert!(s.min().is_nan());
+        assert!(s.max().is_nan());
+        assert_eq!(s.sum(), 0.0);
+        assert_eq!(s.count(), 0);
+        assert!(s.mean().is_nan());
+
+        s.report(1.0);
+        s.report(1.0);
+        s.report(2.5);
+        s.report(10.0);
+        s.report(-2.0);
+
+        assert_eq!(s.min(), -2.0);
+        assert_eq!(s.max(), 10.0);
+        assert_eq!(s.sum(), 12.5);
+        assert_eq!(s.count(), 5);
+        assert_eq!(s.mean(), 2.5);
+
+    }
+
+    #[test]
+    fn test_confusion_matrix() {
+
+        let mut m = ConfusionMatrix::new();
+        m.record(true, false);
+        m.record(true, true);
+        m.record(true, false);
+        m.record(false, false);
+        m.record(false, false);
+        m.record(false, true);
+        assert_eq!(m.to_string(), "[t+ = 0.16666667, t- = 0.33333334, f+ = 0.33333334, f- = 0.16666667]".to_string());
+
+
     }
 
 }

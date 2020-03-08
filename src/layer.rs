@@ -13,6 +13,7 @@ pub trait NetLayerBase {
     fn load_weights_from(&mut self, source: &[f32]);
     fn add_weights_from(&mut self, source: &[f32]);
     fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer);
+    fn get_config(&self) -> NetLayerConfig;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,7 +106,11 @@ impl NetLayerBase for NetLayer {
     }
 
     fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer) {
-        self.get_delegate_mut().initialize_weights( initializer);
+        self.get_delegate_mut().initialize_weights(initializer);
+    }
+
+    fn get_config(&self) -> NetLayerConfig {
+        self.get_delegate().get_config()
     }
 }
 
@@ -269,5 +274,9 @@ impl NetLayerBase for FullyConnectedNetLayer {
         for i in 0..self.biases.len() {
             self.biases[i] = initializer.get_bias();
         }
+    }
+
+    fn get_config(&self) -> NetLayerConfig {
+        NetLayerConfig::FullyConnected(self.size, self.activation_fn)
     }
 }

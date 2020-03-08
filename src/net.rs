@@ -22,15 +22,16 @@ impl NetConfig {
     pub fn new_fully_connected(
         input_size: usize,
         output_size: usize,
-        hidden_layer_sizes: Vec<usize>,
+        hidden_layer_sizes: impl AsRef<[usize]>,
         activation_fn: ActivationFn,
     ) -> Self {
+        let hidden_layer_sizes = hidden_layer_sizes.as_ref();
         assert!(input_size > 0);
         assert!(output_size > 0);
         let mut layers: Vec<NetLayerConfig> = Vec::with_capacity(hidden_layer_sizes.len() + 1);
         for layer_size in hidden_layer_sizes {
-            assert!(layer_size > 0);
-            layers.push(NetLayerConfig::FullyConnected(layer_size, activation_fn));
+            assert!(*layer_size > 0);
+            layers.push(NetLayerConfig::FullyConnected(*layer_size, activation_fn));
         }
         layers.push(NetLayerConfig::FullyConnected(output_size, activation_fn));
         NetConfig {
@@ -79,6 +80,11 @@ pub struct Net {
 #[allow(dead_code)]
 impl Net {
 
+    // TODO:
+    // Consider using contiguous memory as the backing store for weights.
+    // Will probably need some wild unsafe code to make it work, but it will help with
+    // Cache locality and writing data to and from a weight buffer.
+
     fn predict_with_buffers(&self, input: &[f32], output: &mut[f32], buffer_a: &mut[f32], buffer_b: &mut[f32]) {
 
         let num_layers = self.layers.len();
@@ -87,6 +93,8 @@ impl Net {
         debug_assert_eq!(output.len(), self.output_size);
         debug_assert!(buffer_a.len() >= self.max_buffer_size);
         debug_assert!(buffer_b.len() >= self.max_buffer_size);
+
+        // TODO: handle 1 layer??
         debug_assert!(num_layers > 1);
 
 
@@ -189,7 +197,7 @@ impl Net {
         let layer_sizes: Vec<usize> = self.layer_iter()
             .map(NetLayer::weight_buffer_size)
             .collect();
-        RowBuffer::new_with_row_sizes(0.0, layer_sizes.as_slice())
+        RowBuffer::new_with_row_sizes(0.0, layer_sizes)
     }
 
     pub fn get_weights(&self) -> RowBuffer<f32> {
@@ -204,12 +212,21 @@ impl Net {
         }
     }
 
+    pub fn get_config(&self) -> NetConfig {
+        let layers: Vec<NetLayerConfig> = self.layer_iter()
+            .map(NetLayer::get_config)
+            .collect();
+        NetConfig {
+            input_size: self.input_size,
+            layers
+        }
+    }
+
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::initializer::RandomNetInitializer;
 
     #[test]
     fn test_weight_buffer() {
@@ -217,7 +234,7 @@ mod test {
         let config = NetConfig::new_fully_connected(
             4,
             2,
-            vec![3],
+            [3],
             ActivationFn::standard_logistic_sigmoid()
         );
 
@@ -240,6 +257,28 @@ mod test {
         for (i, element) in buf2.get_buffer().iter().enumerate() {
             assert_eq!(i as f32, *element);
         }
+
+    }
+
+    #[test]
+    fn test_config_round_trip_fully_connected() {
+
+        let config = NetConfig::new_fully_connected(
+            4,
+            2,
+            [5, 4, 3],
+            ActivationFn::standard_logistic_sigmoid()
+        );
+
+        let mut net = config.create_net();
+
+        let config2 = net.get_config();
+
+        let mut net2 = config2.create_net();
+
+        let config3 = net2.get_config();
+
+        assert_eq!(config3, config);
 
     }
 
