@@ -1,0 +1,18 @@
+[package]
+name = "rust_neural_net"
+version = "0.1.0"
+authors = ["Aaron Cake <acake@indeed.com>"]
+edition = "2018"
+
+[dependencies]
+fast-math = "0.1"
+rand = "0.6.1"
+rand_xorshift = "0.1.0"
+csv = "1"
+quick-error = "1.2.2"
+objekt = "0.1.2"
+num_cpus = "1.10.0"
+derive_builder = "0.7.1"
+serde = { version = "1.0", features = ["derive"] }
+num = "~0.2.1"
+crossbeam = "~0.7.3"
