@@ -70,6 +70,7 @@ quick_error! {
 }
 
 impl TrainingSet {
+    #[allow(dead_code)]
     pub fn new_from_vec(num_cols: usize, data: Vec<f32>) -> Self {
         assert_eq!(data.len() % num_cols, 0);
         let len = data.len();
@@ -86,7 +87,7 @@ impl TrainingSet {
     pub fn get_data_slice(&self) -> &[f32] {
         &self.data[self.offset..self.end]
     }
-    pub fn new_from_csv(path: impl AsRef<Path>) -> Result<TrainingSet, Box<Error>> {
+    pub fn new_from_csv(path: impl AsRef<Path>) -> Result<TrainingSet, Box<dyn Error>> {
         let mut reader = csv::ReaderBuilder::new()
             .trim(csv::Trim::All)
             .from_path(path)?;
@@ -138,6 +139,7 @@ impl TrainingSet {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_column_names(&self) -> Option<Vec<String>> {
         match &self.column_names {
             None => None,
@@ -145,10 +147,12 @@ impl TrainingSet {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_num_rows(&self) -> usize {
         self.num_rows
     }
 
+    #[allow(dead_code)]
     pub fn get_num_cols(&self) -> usize {
         self.num_cols
     }
@@ -225,6 +229,7 @@ impl TrainingSet {
         vec
     }
 
+    #[allow(dead_code)]
     pub fn iter_shift_partition(
         &self, num_partitions: usize,
         shift: usize,

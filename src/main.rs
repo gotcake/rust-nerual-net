@@ -15,22 +15,21 @@ mod buffer;
 mod func;
 
 use std::error::Error;
-use std::time::{SystemTime, Duration};
+use std::time::Duration;
 
 use crate::{
-    net::Net,
     data::TrainingSet,
     train::NetTrainerBuilder,
     train::BackpropOptions
 };
-use crate::train::{ParamFactory, NetTrainer, Executor, TrainingResult};
+use crate::train::{ParamFactory, NetTrainer, TrainingResult};
 use crate::net::NetConfig;
 use crate::func::{ActivationFn, CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn};
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
 
 
-    let seed = [0x1235, 0x5663, 0x8392, 0x1211];
+    //let seed = [0x1235, 0x5663, 0x8392, 0x1211];
 
     let training_set = TrainingSet::new_from_csv("data/2x2_lines_binary.csv")?;
     let independent_columns = training_set.get_named_column_selection(&vec!["0_0", "0_1", "1_0", "1_1"])?;
@@ -52,7 +51,7 @@ fn main() -> Result<(), Box<Error>> {
 
 }
 
-fn net_factory(params: &mut dyn ParamFactory) -> NetConfig {
+fn net_factory(_params: &mut dyn ParamFactory) -> NetConfig {
     NetConfig::new_fully_connected(
         4,
         2,
@@ -61,7 +60,7 @@ fn net_factory(params: &mut dyn ParamFactory) -> NetConfig {
     )
 }
 
-fn backprop_options_factory(params: &mut dyn ParamFactory) -> BackpropOptions {
+fn backprop_options_factory(_params: &mut dyn ParamFactory) -> BackpropOptions {
     BackpropOptions {
         completion_fn: CompletionFn::stop_after_duration(Duration::from_secs(15)),
         mini_batch_size_fn: MiniBatchSize::Full,

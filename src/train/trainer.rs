@@ -1,5 +1,4 @@
 use rand::{Rng, FromEntropy, SeedableRng};
-use core::borrow::{BorrowMut, Borrow};
 
 use crate::{
     func::CompletionFn,
@@ -10,38 +9,28 @@ use crate::{
         BackpropOptions,
         Executor,
         task::{Task, TaskResult},
-        ExecutorError
     },
     initializer::{NetInitializer, RandomNetInitializer},
     train::{ExecutorControlMaster},
     train::task::TaskOp
 };
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
-    sync::mpsc::Sender,
     time::SystemTime,
-    cell::{Cell, RefCell, Ref},
+    cell::RefCell,
     rc::Rc,
-    sync::{
-        Mutex,
-        RwLock,
-        Arc,
-        mpsc::{SyncSender, Receiver},
-        mpsc
-    },
-    collections::HashMap,
     time::Duration,
     thread,
     error::Error,
-    process::exit
 };
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 enum ParamSpec {
     RangeUsize(usize, usize),
     RangeF32(f32, f32),
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ParamValue {
     Usize(usize),
@@ -68,6 +57,7 @@ impl RandomOptimizer {
             rng: Rc::new(RefCell::new(rand_xorshift::XorShiftRng::from_entropy()))
         }
     }
+    #[allow(dead_code)]
     pub fn from_seed(seed: [u32; 4]) -> Self {
         let seed_bytes = unsafe {
             std::mem::transmute::<[u32; 4], [u8; 16]>(seed)
@@ -80,7 +70,7 @@ impl RandomOptimizer {
 
 impl Optimizer for RandomOptimizer {
 
-    fn next_parameters(&mut self, id: usize) -> Box<dyn ParamFactory> {
+    fn next_parameters(&mut self, _id: usize) -> Box<dyn ParamFactory> {
         Box::new(RandomParamFactory {
             rng: self.rng.clone(),
         })
@@ -95,9 +85,10 @@ struct RandomParamFactory {
     rng: Rc<RefCell<rand_xorshift::XorShiftRng>>
 }
 
+#[allow(dead_code)]
 impl ParamFactory for RandomParamFactory {
 
-    fn range_usize(&mut self, key: String, low: usize, high: usize) -> usize {
+    fn range_usize(&mut self, _key: String, low: usize, high: usize) -> usize {
         return (&*self.rng).borrow_mut().gen_range(low, high);
     }
 
@@ -107,8 +98,9 @@ impl ParamFactory for RandomParamFactory {
 
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
-enum NetTrainerMode {
+pub enum NetTrainerMode {
     Standard,
     Evolutionary { trials_per_generation: usize }
 }
@@ -122,15 +114,15 @@ pub struct NetTrainer {
     #[builder(default = "Executor::Local(1)")]
     executor: Executor,
     #[builder(default = "Box::new(default_optimizer_factory)")]
-    optimizer_factory: Box<Fn() -> Box<dyn Optimizer>>,
+    optimizer_factory: Box<dyn Fn() -> Box<dyn Optimizer>>,
     #[builder(default = "NetTrainerMode::Standard")]
     mode: NetTrainerMode,
-    net_config_factory: Box<Fn(&mut dyn ParamFactory) -> NetConfig>,
-    backprop_options_factory: Box<Fn(&mut dyn ParamFactory) -> BackpropOptions>,
+    net_config_factory: Box<dyn Fn(&mut dyn ParamFactory) -> NetConfig>,
+    backprop_options_factory: Box<dyn Fn(&mut dyn ParamFactory) -> BackpropOptions>,
     #[builder(default = "CompletionFn::stop_after_epoch(1)")]
     global_completion_fn: CompletionFn,
     #[builder(default = "Box::new(default_initializer_factory)")]
-    initializer_factory: Box<Fn(&mut dyn ParamFactory) -> Box<dyn NetInitializer>>,
+    initializer_factory: Box<dyn Fn(&mut dyn ParamFactory) -> Box<dyn NetInitializer>>,
     #[builder(setter(skip))]
     next_task_id: usize,
 }
@@ -139,10 +131,11 @@ fn default_optimizer_factory() -> Box<dyn Optimizer>{
     Box::new(RandomOptimizer::new_from_entropy())
 }
 
-fn default_initializer_factory(params: &mut dyn ParamFactory) -> Box<dyn NetInitializer>{
+fn default_initializer_factory(_params: &mut dyn ParamFactory) -> Box<dyn NetInitializer>{
     Box::new(RandomNetInitializer::new_standard_from_entropy())
 }
 
+#[allow(dead_code)]
 impl NetTrainerBuilder {
 
     pub fn net_config(self, net_config: NetConfig) -> Self {
@@ -167,7 +160,7 @@ pub struct TrainingResult {
 
 impl NetTrainer {
 
-    pub fn execute(&mut self) -> Result<TrainingResult, Box<Error>> {
+    pub fn execute(&mut self) -> Result<TrainingResult, Box<dyn Error>> {
 
         let executor = self.executor.get_instance()?;
 
@@ -175,7 +168,7 @@ impl NetTrainer {
 
         let result = match self.mode {
             NetTrainerMode::Standard => self.train_standard(ctrl_master),
-            NetTrainerMode::Evolutionary { trials_per_generation } => { unimplemented!(); },
+            NetTrainerMode::Evolutionary { trials_per_generation: _ } => { unimplemented!(); },
         };
 
         executor.stop();
@@ -183,9 +176,9 @@ impl NetTrainer {
         result
     }
 
-    fn train_standard(&mut self, ctrl_master: ExecutorControlMaster) -> Result<TrainingResult, Box<Error>> {
+    fn train_standard(&mut self, ctrl_master: ExecutorControlMaster) -> Result<TrainingResult, Box<dyn Error>> {
 
-        let mut optimizer: Box<Optimizer> = self.optimizer_factory.as_ref()();
+        let mut optimizer: Box<dyn Optimizer> = self.optimizer_factory.as_ref()();
         let mut num_trials = 0;
         let start_time = SystemTime::now();
         let mut best_result: Option<TaskResult> = None;
@@ -264,10 +257,11 @@ impl NetTrainer {
 
         let net_config: NetConfig = net_config_factory(params.as_mut());
 
-        let mut initializer: Box<dyn NetInitializer> = self.initializer_factory.as_ref()(params.as_mut());
+        let initializer: Box<dyn NetInitializer> = self.initializer_factory.as_ref()(params.as_mut());
 
         let net = Net::from_config(net_config, initializer);
 
+        // TODO: cleanup
         println!("{:?}", net);
 
         let backprop_options: BackpropOptions = self.backprop_options_factory.as_ref()(params.as_mut());
@@ -283,106 +277,4 @@ impl NetTrainer {
 
     }
 
-
-
-
 }
-
-/*
-struct TrainerImpl {
-    training_set: TrainingSet,
-    dependent_columns: ColumnSelection,
-    independent_columns: ColumnSelection
-    start_time: SystemTime,
-    task_sender: SyncSender<Task>,
-    results_receiver: Receiver<Result<TaskResult, ExecutorError>>,
-    task_results:
-}*/
-
-struct StandardTrainerImpl {
-    optimizer: Box<dyn Optimizer>,
-    training_set: TrainingSet,
-    dependent_columns: ColumnSelection,
-    independent_columns: ColumnSelection,
-    completion_fn: CompletionFn,
-
-}
-
-/*
-
-impl StandardTrainerImpl {
-
-    fn train(&mut self, task_sender: SyncSender<Task>, results_receiver: Receiver<Result<TaskResult, ExecutorError>>) {
-
-        let mut completed_trials = 0;
-        let mut next_id = 0;
-        let start_time = SystemTime::now();
-        let mut best_result: Option<TaskResult> = None;
-
-        loop {
-
-            // TODO next trial
-
-            let params = self.optimizer.next_parameters();
-
-            task_sender.try_send()
-
-
-
-
-            let best_result = best_result.expect("best_result missing");
-            if self.completion_fn.should_stop_training(completed_trials, start_time, &best_result.error_stats) {
-                break;
-            }
-        }
-
-        // TODO: return best trial
-        unimplemented!();
-
-    }
-
-    fn process_response(&mut self, results_receiver: Receiver<Result<TaskResult, ExecutorError>>) {
-
-    }
-
-}
-
-*/
-
-        /*
-
-        Standard:
-
-        while not end condition:
-
-            process any pending responses
-
-            try send task
-            if not task accepted:
-                wait for next response
-
-
-        */
-
-        /*
-
-        Evolutionary
-
-        train:
-
-        queue initial generations
-
-        while not end condition:
-
-            process any pending responses
-
-            task = new task from best generation with remaining trials
-            send task and wait
-
-
-        process response:
-            if result in top N results, create new generation and add to queue
-
-
-
-        */

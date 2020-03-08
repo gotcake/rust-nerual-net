@@ -1,5 +1,4 @@
 use std::{f32, fmt};
-use std::cmp::Ordering;
 
 #[derive(Clone)]
 pub struct Stats {

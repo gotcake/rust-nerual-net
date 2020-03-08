@@ -1,22 +1,26 @@
 use crate::{
     train::{
-        TrainingContext,
-        task::{Task, TaskResult},
-    },
-    net::Net,
-    train::task::TaskError
+        task::{
+            TaskResult,
+            Task,
+            TaskError
+        }
+    }
 };
 use std::{
-    sync::mpsc,
-    sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
-    task::{Context, Poll},
     error::Error,
     net::IpAddr,
-    future::Future,
     thread,
-    sync::mpsc::{Receiver, Sender},
-    sync::mpsc::{SendError, TryIter}
+    sync::{
+        mpsc::{
+            Receiver,
+            Sender,
+            self,
+            TryIter,
+        },
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    }
 };
 use crossbeam::internal::SelectHandle;
 
@@ -32,6 +36,7 @@ quick_error! {
 }
 
 
+#[allow(dead_code)]
 pub enum Executor {
     Local(usize),
     Distributed { discover_addr: IpAddr, discover_port: u16 },
@@ -40,7 +45,7 @@ pub enum Executor {
 impl Executor {
     pub fn get_instance(&self) -> Result<Box<dyn ExecutorInstance>, ExecutorError> {
         match self {
-            &Executor::Distributed { discover_addr, discover_port } => {
+            &Executor::Distributed { discover_addr: _, discover_port: _ } => {
                 unimplemented!();
             },
             &Executor::Local(num_workers) => Ok(Box::new(LocalExecutor::new(num_workers))),
@@ -78,7 +83,7 @@ impl ExecutorInstance for LocalExecutor {
             let stopped_flag = self.stopped.clone();
             thread::spawn(move || {
                 // wrap logic in a function to allow error cascading with "?"
-                let inner_fn = || -> Result<(), Box<Error>> {
+                let inner_fn = || -> Result<(), Box<dyn Error>> {
                     while !stopped_flag.load(Ordering::Relaxed) {
 
                         // try to get next task
@@ -140,7 +145,7 @@ impl ExecutorControlMaster {
         self.task_sender.is_ready()
     }
 
-    pub fn send_task(&self, task: Task) -> Result<(), Box<Error>> {
+    pub fn send_task(&self, task: Task) -> Result<(), Box<dyn Error>> {
         self.task_sender.send(task)?;
         Ok(())
     }
@@ -157,14 +162,15 @@ pub struct ExecutorControlSlave {
     results_sender: Sender<Result<TaskResult, ExecutorError>>,
 }
 
+#[allow(dead_code)]
 impl ExecutorControlSlave {
 
-    fn send_results(&self, result: Result<TaskResult, ExecutorError>) -> Result<(), Box<Error>> {
+    fn send_results(&self, result: Result<TaskResult, ExecutorError>) -> Result<(), Box<dyn Error>> {
         self.results_sender.send(result)?;
         Ok(())
     }
 
-    fn get_next_task(&self) -> Result<Task, Box<Error>> {
+    fn get_next_task(&self) -> Result<Task, Box<dyn Error>> {
         Ok(self.task_receiver.recv()?)
     }
 

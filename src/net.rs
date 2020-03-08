@@ -3,13 +3,11 @@ use core::slice;
 use crate::{
     layer::{
         NetLayer,
-        FullyConnectedNetLayer,
         NetLayerBase,
-        NetLayerConfig
+        NetLayerConfig,
     },
     initializer::NetInitializer,
     func::ActivationFn,
-    buffer::RowBuffer,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,7 +63,9 @@ impl Net {
         let mut initializer = initializer;
         for ref layer_config in config.layers {
             let layer = layer_config.create_layer(layer_input_size, layer_idx, initializer.as_mut());
+            layer_input_size = layer.output_size();
             layers.push(layer);
+            layer_idx += 1;
         }
         let max_buffer_size = layers.iter()
             .map(NetLayer::weight_buffer_size)

@@ -157,6 +157,7 @@ impl FullyConnectedNetLayer {
         self.weights[input_index * self.size + node_index]
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     fn set_weight(&mut self, input_index: usize, node_index: usize, value: f32) {
         self.weights[input_index * self.size + node_index] = value;

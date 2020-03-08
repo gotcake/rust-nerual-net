@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub enum MiniBatchSize {
     Full,

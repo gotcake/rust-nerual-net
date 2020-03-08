@@ -1,8 +1,3 @@
-use std::ops::AddAssign;
-use std::ops::Mul;
-use std::ops::SubAssign;
-use num::traits::Float;
-
 #[derive(Debug)]
 pub struct RowBuffer<T: Copy> {
     buffer: Vec<T>,
@@ -93,7 +88,7 @@ impl<T> RowBuffer<T> where T: Copy {
 
 }
 
-impl <T> RowBuffer<T> where T: Float + std::ops::AddAssign + std::ops::SubAssign {
+impl <T> RowBuffer<T> where T: num::traits::Float + std::ops::AddAssign + std::ops::SubAssign {
 
     pub fn add(&mut self, other: &RowBuffer<T>) {
         assert_eq!(self.buffer.len(), other.buffer.len());
@@ -113,6 +108,23 @@ impl <T> RowBuffer<T> where T: Float + std::ops::AddAssign + std::ops::SubAssign
         for i in 0..self.buffer.len() {
             self.buffer[i] -= subtract.buffer[i];
         }
+    }
+
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "assertion failed: row_sizes.len() > 0")]
+    fn test_empty_not_allowed() {
+        RowBuffer::new_with_row_sizes(0f32, &Vec::new());
+    }
+
+    #[test]
+    fn test_basics() {
+        // TODO: implement
     }
 
 }

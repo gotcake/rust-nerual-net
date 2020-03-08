@@ -38,7 +38,7 @@ impl ActivationFn {
 
     pub fn get_activation_derivative(&self, n: f32) -> f32 {
         match self {
-            &ActivationFn::LogisticSigmoid { steepness, scale, y_offset } => {
+            &ActivationFn::LogisticSigmoid { steepness, scale, y_offset: _ } => {
                 let z = f32::exp(-steepness * n);
                 scale * steepness * z / square_f32(z + 1.0)
             },

@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::time::SystemTime;
 
 use crate::{

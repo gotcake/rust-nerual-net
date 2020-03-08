@@ -1,10 +1,4 @@
-use std::time::SystemTime;
-
-use crate::{
-    data::ColumnSelection,
-};
-use crate::func::CompletionFn;
-use crate::stats::Stats;
+use crate::data::ColumnSelection;
 
 #[derive(Clone, Debug)]
 pub struct TrainingContext {

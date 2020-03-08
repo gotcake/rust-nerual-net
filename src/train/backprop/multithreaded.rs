@@ -1,13 +1,14 @@
-use std::sync::atomic::Ordering;
-use std::thread;
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc;
-use std::error::Error;
-use std::time::SystemTime;
-
-use serde::{Deserialize, Serialize};
+use std::{
+    sync::{
+        atomic::AtomicBool,
+        RwLock,
+        Arc,
+        atomic::Ordering,
+        mpsc,
+    },
+    thread,
+    time::SystemTime,
+};
 
 use crate::{
     train::{
@@ -126,6 +127,7 @@ pub fn train_backprop_multi_threaded(net: &mut Net,
                     partition_index = shared_state.next_partition_index;
                     shared_state.next_partition_index = (partition_index + 1) % num_partitions;
 
+                    // TODO: something wrong here, variable unused
                     partition_shift = shared_state.partition_row_shifts[partition_index];
                     shared_state.partition_row_shifts[partition_index] += 1;
 

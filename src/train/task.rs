@@ -1,12 +1,13 @@
-use crate::train::{TrainingContext, BackpropOptions};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use crate::net::Net;
-use crate::data::{TrainingSet, ColumnSelection};
-use crate::train::backprop::backprop_stage_task_impl;
-use crate::stats::Stats;
-use std::error::Error;
-use std::time::Duration;
+use crate::{
+    data::{TrainingSet, ColumnSelection},
+    net::Net,
+    train::{
+        TrainingContext,
+        BackpropOptions,
+        backprop::backprop_stage_task_impl
+    },
+    stats::Stats
+};
 
 
 pub struct Task {

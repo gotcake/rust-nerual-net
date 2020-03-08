@@ -5,7 +5,6 @@ use crate::{
         buffers::TrainingBuffers,
         TrainingContext
     },
-    buffer::RowBuffer,
     layer::NetLayerBase
 };
 use crate::func::ErrorFn;
