@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RowBuffer<T: Copy> {
     buffer: Vec<T>,
     row_offsets_and_ends: Vec<(usize, usize)>,
@@ -74,8 +74,8 @@ impl<T> RowBuffer<T> where T: Copy {
     }
 
     pub fn reset_to(&mut self, value: T) {
-        for item in self.buffer.iter_mut() {
-            *item = value;
+        for i in 0..self.buffer.len() {
+            self.buffer[i] = value;
         }
     }
 
@@ -86,9 +86,24 @@ impl<T> RowBuffer<T> where T: Copy {
         }
     }
 
+    #[inline]
+    pub fn buffer_len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    #[inline]
+    pub fn get_buffer(&self) -> &[T] {
+        self.buffer.as_slice()
+    }
+
+    #[inline]
+    pub fn get_buffer_mut(&mut self) -> &mut [T] {
+        self.buffer.as_mut_slice()
+    }
+
 }
 
-impl <T> RowBuffer<T> where T: num::traits::Float + std::ops::AddAssign + std::ops::SubAssign {
+impl <T> RowBuffer<T> where T: Copy + std::ops::AddAssign {
 
     pub fn add(&mut self, other: &RowBuffer<T>) {
         assert_eq!(self.buffer.len(), other.buffer.len());
@@ -96,12 +111,21 @@ impl <T> RowBuffer<T> where T: num::traits::Float + std::ops::AddAssign + std::o
             self.buffer[i] += other.buffer[i];
         }
     }
+
+}
+
+impl <T> RowBuffer<T> where T: Copy + std::ops::AddAssign + std::ops::Mul<Output=T> {
+
     pub fn add_with_multiplier(&mut self, other: &RowBuffer<T>, multiplier: T) {
         assert_eq!(self.buffer.len(), other.buffer.len());
         for i in 0..self.buffer.len() {
             self.buffer[i] += other.buffer[i] * multiplier;
         }
     }
+
+}
+
+impl <T> RowBuffer<T> where T: Copy + std::ops::SubAssign {
 
     pub fn subtract(&mut self, subtract: &RowBuffer<T>) {
         assert_eq!(self.buffer.len(), subtract.buffer.len());
@@ -124,7 +148,85 @@ mod test {
 
     #[test]
     fn test_basics() {
-        // TODO: implement
+
+        let mut buf = RowBuffer::new_with_row_sizes(0usize, &vec![1, 0, 10, 2]);
+
+        // check for correct structure
+        assert_eq!(4, buf.num_rows());
+
+        assert_eq!(1, buf.get_row(0).len());
+        assert_eq!(1, buf.get_row_mut(0).len());
+        assert_eq!(1, buf.get_first_row().len());
+        assert_eq!(1, buf.get_first_row_mut().len());
+
+        assert_eq!(0, buf.get_row(1).len());
+        assert_eq!(0, buf.get_row_mut(1).len());
+
+        assert_eq!(10, buf.get_row(2).len());
+        assert_eq!(10, buf.get_row_mut(2).len());
+
+        assert_eq!(2, buf.get_row(3).len());
+        assert_eq!(2, buf.get_row_mut(3).len());
+        assert_eq!(2, buf.get_last_row().len());
+        assert_eq!(2, buf.get_last_row_mut().len());
+
+        // populate data
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row_mut(i);
+            for j in 0..row.len() {
+                row[j] = i * 10 + j;
+            }
+        }
+
+        // check values
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row(i);
+            for j in 0..row.len() {
+                assert_eq!(i * 10 + j, row[j]);
+            }
+        }
+
+        let mut buf2 = buf.clone();
+        buf.add(&buf2);
+
+        // check values
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row(i);
+            for j in 0..row.len() {
+                assert_eq!((i * 10 + j) * 2, row[j]);
+            }
+        }
+
+        buf.subtract(&buf2);
+
+        // check values
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row(i);
+            for j in 0..row.len() {
+                assert_eq!(i * 10 + j, row[j]);
+            }
+        }
+
+        buf.add_with_multiplier(&buf2, 2);
+
+        // check values
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row(i);
+            for j in 0..row.len() {
+                assert_eq!((i * 10 + j) * 3, row[j]);
+            }
+        }
+
+        buf.copy_into(&mut buf2);
+
+        // check values
+        for i in 0..buf.num_rows() {
+            let row = buf.get_row(i);
+            for j in 0..row.len() {
+                assert_eq!((i * 10 + j) * 3, row[j]);
+            }
+        }
+
     }
 
 }

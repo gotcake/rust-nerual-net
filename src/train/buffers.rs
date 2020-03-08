@@ -4,7 +4,6 @@ use crate::{
     layer::NetLayerBase,
     buffer::{
         RowBuffer,
-        WeightBuffer
     }
 };
 
@@ -16,7 +15,7 @@ pub struct TrainingBuffers {
     pub error_gradient_buffers: RowBuffer<f32>,
     pub input_error_buffer: Vec<f32>,
     pub error_stats: Stats,
-    pub weight_deltas: WeightBuffer,
+    pub weight_deltas: RowBuffer<f32>,
 }
 
 impl TrainingBuffers {
@@ -31,7 +30,7 @@ impl TrainingBuffers {
             error_gradient_buffers: RowBuffer::new_with_row_sizes(0.0, layer_sizes.as_ref()),
             input_error_buffer: vec![0f32; net.input_size()],
             error_stats: Stats::new(),
-            weight_deltas: WeightBuffer::new_for_net(net),
+            weight_deltas: net.new_zeroed_weight_buffer(),
         }
     }
 }

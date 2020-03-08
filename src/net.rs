@@ -6,6 +6,7 @@ use crate::{
         NetLayerBase,
         NetLayerConfig,
     },
+    buffer::RowBuffer,
     initializer::NetInitializer,
     func::ActivationFn,
 };
@@ -55,7 +56,7 @@ impl Net {
     ) -> Self {
 
         assert!(config.input_size > 0);
-        assert!(config.layers.len() > 0);
+        assert!(config.layers.len() > 1);
 
         let mut layers = Vec::with_capacity(config.layers.len());
         let mut layer_input_size = config.input_size;
@@ -163,5 +164,81 @@ impl Net {
 
     #[inline]
     pub fn max_buffer_size(&self) -> usize { self.max_buffer_size }
+
+    pub fn store_weights_into(&self, buffer: &mut RowBuffer<f32>) {
+        debug_assert_eq!(buffer.num_rows(), self.layers.len());
+        for i in 0..self.layers.len() {
+            self.layers[i].store_weights_into(buffer.get_row_mut(i));
+        }
+    }
+
+    pub fn load_weights_from(&mut self, buffer: &RowBuffer<f32>) {
+        debug_assert_eq!(buffer.num_rows(), self.layers.len());
+        for i in 0..self.layers.len() {
+            self.layers[i].load_weights_from(buffer.get_row(i));
+        }
+    }
+
+    pub fn add_weights_from(&mut self, buffer: &RowBuffer<f32>) {
+        debug_assert_eq!(buffer.num_rows(), self.layers.len());
+        for i in 0..self.layers.len() {
+            self.layers[i].add_weights_from(buffer.get_row(i));
+        }
+    }
+
+    pub fn new_zeroed_weight_buffer(&self) -> RowBuffer<f32> {
+        let layer_sizes: Vec<usize> = self.layer_iter()
+            .map(NetLayer::weight_buffer_size)
+            .collect();
+        RowBuffer::new_with_row_sizes(0.0, layer_sizes.as_slice())
+    }
+
+    pub fn get_weights(&self) -> RowBuffer<f32> {
+        let mut buf = self.new_zeroed_weight_buffer();
+        self.store_weights_into(&mut buf);
+        buf
+    }
+
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::initializer::RandomNetInitializer;
+
+    #[test]
+    fn test_weight_buffer() {
+
+        let config = NetConfig::new_fully_connected(
+            4,
+            2,
+            vec![3],
+            ActivationFn::standard_logistic_sigmoid()
+        );
+
+        let mut net = Net::from_config(
+            config,
+            Box::new(RandomNetInitializer::new_standard_from_entropy())
+        );
+
+        let mut buf = net.new_zeroed_weight_buffer();
+        let mut buf2 = net.new_zeroed_weight_buffer();
+
+        assert_eq!(buf.num_rows(), 2);
+        assert_eq!(buf.get_row(0).len(), 4 * 3 + 3);
+        assert_eq!(buf.get_row(1).len(), 3 * 2 + 2);
+
+        for (i, element) in buf.get_buffer_mut().iter_mut().enumerate() {
+            *element = i as f32;
+        }
+
+        net.load_weights_from(&buf);
+        net.store_weights_into(&mut buf2);
+
+        for (i, element) in buf2.get_buffer().iter().enumerate() {
+            assert_eq!(i as f32, *element);
+        }
+
+    }
 
 }

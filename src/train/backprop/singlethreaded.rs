@@ -90,7 +90,7 @@ pub fn train_backprop_single_batch(
 
         //buffers.error_gradient_buffers.reset_to(0.0);
 
-        buffers.weight_deltas.get_buffer_mut().reset_to(0.0);
+        buffers.weight_deltas.reset_to(0.0);
 
         let mut epochs = match mini_batch_size {
             None => -1,
@@ -115,7 +115,7 @@ pub fn train_backprop_single_batch(
                     buffers.output_buffers.get_row(layer_index),
                     learning_rate,
                     input_errors,
-                    buffers.weight_deltas.get_buffer_mut().get_row_mut(layer_index),
+                    buffers.weight_deltas.get_row_mut(layer_index),
                 );
             }
 
@@ -125,14 +125,14 @@ pub fn train_backprop_single_batch(
                 buffers.output_buffers.get_first_row(),
                 learning_rate,
                 buffers.input_error_buffer.as_mut_slice(),
-                buffers.weight_deltas.get_buffer_mut().get_first_row_mut(),
+                buffers.weight_deltas.get_first_row_mut(),
             );
 
             epochs -= 1;
         }
 
         // apply weight updates
-        buffers.weight_deltas.add_to_net(net);
+        net.add_weights_from(&buffers.weight_deltas);
 
     }
 

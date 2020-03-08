@@ -9,8 +9,8 @@ pub trait NetLayerBase {
     fn input_size(&self) -> usize;
     fn output_size(&self) -> usize;
     fn weight_buffer_size(&self) -> usize;
-    fn write_weights_into(&self, target: &mut [f32]);
-    fn read_weights_from(&mut self, source: &[f32]);
+    fn store_weights_into(&self, target: &mut [f32]);
+    fn load_weights_from(&mut self, source: &[f32]);
     fn add_weights_from(&mut self, source: &[f32]);
 }
 
@@ -91,12 +91,12 @@ impl NetLayerBase for NetLayer {
         self.get_delegate().weight_buffer_size()
     }
 
-    fn write_weights_into(&self, target: &mut [f32]) {
-        self.get_delegate().write_weights_into(target)
+    fn store_weights_into(&self, target: &mut [f32]) {
+        self.get_delegate().store_weights_into(target)
     }
 
-    fn read_weights_from(&mut self, source: &[f32]) {
-        self.get_delegate_mut().read_weights_from(source)
+    fn load_weights_from(&mut self, source: &[f32]) {
+        self.get_delegate_mut().load_weights_from(source)
     }
 
     fn add_weights_from(&mut self, source: &[f32]) {
@@ -230,7 +230,7 @@ impl NetLayerBase for FullyConnectedNetLayer {
         self.weights.len() + self.biases.len()
     }
 
-    fn write_weights_into(&self, target: &mut [f32]) {
+    fn store_weights_into(&self, target: &mut [f32]) {
 
         debug_assert_eq!(target.len(), self.weights.len() + self.biases.len());
 
@@ -243,7 +243,7 @@ impl NetLayerBase for FullyConnectedNetLayer {
         }
     }
 
-    fn read_weights_from(&mut self, source: &[f32]) {
+    fn load_weights_from(&mut self, source: &[f32]) {
 
         debug_assert_eq!(source.len(), self.weights.len() + self.biases.len());
 
