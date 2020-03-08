@@ -9,10 +9,11 @@ use crate::{
         BackpropOptions,
         Executor,
         task::{Task, TaskResult},
+        ExecutorControlMaster,
+        task::TaskOp
     },
-    initializer::{NetInitializer, RandomNetInitializer},
-    train::{ExecutorControlMaster},
-    train::task::TaskOp
+    initializer::RandomNetInitializer,
+    utils::stable_hash_seed
 };
 use std::{
     time::SystemTime,
@@ -58,10 +59,8 @@ impl RandomOptimizer {
         }
     }
     #[allow(dead_code)]
-    pub fn from_seed(seed: [u32; 4]) -> Self {
-        let seed_bytes = unsafe {
-            std::mem::transmute::<[u32; 4], [u8; 16]>(seed)
-        };
+    pub fn new_from_seed(seed: &str) -> Self {
+        let seed_bytes = stable_hash_seed(seed);
         RandomOptimizer {
             rng: Rc::new(RefCell::new(rand_xorshift::XorShiftRng::from_seed(seed_bytes)))
         }
@@ -121,18 +120,15 @@ pub struct NetTrainer {
     backprop_options_factory: Box<dyn Fn(&mut dyn ParamFactory) -> BackpropOptions>,
     #[builder(default = "CompletionFn::stop_after_epoch(1)")]
     global_completion_fn: CompletionFn,
-    #[builder(default = "Box::new(default_initializer_factory)")]
-    initializer_factory: Box<dyn Fn(&mut dyn ParamFactory) -> Box<dyn NetInitializer>>,
+    #[builder(setter(skip))]
+    #[builder(default = "RandomNetInitializer::new_standard_from_entropy()")]
+    initializer: RandomNetInitializer,
     #[builder(setter(skip))]
     next_task_id: usize,
 }
 
-fn default_optimizer_factory() -> Box<dyn Optimizer>{
+fn default_optimizer_factory() -> Box<dyn Optimizer> {
     Box::new(RandomOptimizer::new_from_entropy())
-}
-
-fn default_initializer_factory(_params: &mut dyn ParamFactory) -> Box<dyn NetInitializer>{
-    Box::new(RandomNetInitializer::new_standard_from_entropy())
 }
 
 #[allow(dead_code)]
@@ -257,9 +253,9 @@ impl NetTrainer {
 
         let net_config: NetConfig = net_config_factory(params.as_mut());
 
-        let initializer: Box<dyn NetInitializer> = self.initializer_factory.as_ref()(params.as_mut());
+        let mut net = net_config.create_net();
 
-        let net = Net::from_config(net_config, initializer);
+        net.initialize_weights(&mut self.initializer);
 
         // TODO: cleanup
         println!("{:?}", net);

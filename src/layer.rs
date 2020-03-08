@@ -1,4 +1,4 @@
-use crate::initializer::NetInitializer;
+use crate::initializer::RandomNetInitializer;
 use crate::func::ActivationFn;
 use std::fmt;
 
@@ -12,6 +12,7 @@ pub trait NetLayerBase {
     fn store_weights_into(&self, target: &mut [f32]);
     fn load_weights_from(&mut self, source: &[f32]);
     fn add_weights_from(&mut self, source: &[f32]);
+    fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,8 +24,7 @@ impl NetLayerConfig {
     pub fn create_layer(
         &self,
         input_size: usize,
-        layer_idx: usize,
-        initializer: &mut dyn NetInitializer
+        layer_idx: usize
     ) -> NetLayer {
         match self {
             &NetLayerConfig::FullyConnected(size, activation_fn) => {
@@ -33,8 +33,7 @@ impl NetLayerConfig {
                         input_size,
                         size,
                         layer_idx,
-                        activation_fn,
-                        initializer,
+                        activation_fn
                     )
                 )
             },
@@ -49,12 +48,14 @@ pub enum NetLayer {
 
 impl NetLayer {
 
+    #[inline]
     fn get_delegate(&self) -> &dyn NetLayerBase {
         match self {
             NetLayer::FullyConnected(layer) => layer,
         }
     }
 
+    #[inline]
     fn get_delegate_mut(&mut self) -> &mut dyn NetLayerBase {
         match self {
             NetLayer::FullyConnected(layer) => layer,
@@ -102,6 +103,10 @@ impl NetLayerBase for NetLayer {
     fn add_weights_from(&mut self, source: &[f32]) {
         self.get_delegate_mut().add_weights_from(source)
     }
+
+    fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer) {
+        self.get_delegate_mut().initialize_weights( initializer);
+    }
 }
 
 #[derive(Clone)]
@@ -131,23 +136,13 @@ impl FullyConnectedNetLayer {
         input_size: usize,
         size: usize,
         layer_index: usize,
-        activation_fn: ActivationFn,
-        initializer: &mut dyn NetInitializer,
+        activation_fn: ActivationFn
     ) -> Self {
-        let num_weights = input_size * size;
-        let mut weights = Vec::with_capacity(num_weights);
-        for sub_index in 0..num_weights {
-            weights.push(initializer.get_weight(layer_index, sub_index));
-        }
-        let mut biases = Vec::with_capacity(size);
-        for node_index in 0..size {
-            biases.push(initializer.get_bias(layer_index, node_index));
-        }
         FullyConnectedNetLayer {
             input_size,
             size,
-            weights,
-            biases,
+            weights: vec![0.0; input_size * size],
+            biases: vec![0.0; size],
             activation_fn,
         }
     }
@@ -267,4 +262,12 @@ impl NetLayerBase for FullyConnectedNetLayer {
         }
     }
 
+    fn initialize_weights(&mut self,initializer: &mut RandomNetInitializer) {
+        for i in 0..self.weights.len() {
+            self.weights[i] = initializer.get_weight();
+        }
+        for i in 0..self.biases.len() {
+            self.biases[i] = initializer.get_bias();
+        }
+    }
 }

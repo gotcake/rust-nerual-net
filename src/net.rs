@@ -7,7 +7,7 @@ use crate::{
         NetLayerConfig,
     },
     buffer::RowBuffer,
-    initializer::NetInitializer,
+    initializer::RandomNetInitializer,
     func::ActivationFn,
 };
 
@@ -18,6 +18,7 @@ pub struct NetConfig {
 }
 
 impl NetConfig {
+
     pub fn new_fully_connected(
         input_size: usize,
         output_size: usize,
@@ -37,6 +38,34 @@ impl NetConfig {
             layers
         }
     }
+
+    pub fn create_net(&self) -> Net {
+
+        assert!(self.input_size > 0);
+        assert!(self.layers.len() > 0);
+
+        let mut layers = Vec::with_capacity(self.layers.len());
+        let mut layer_input_size = self.input_size;
+        let mut layer_idx = 0;
+        for layer_config in &self.layers {
+            let layer = layer_config.create_layer(layer_input_size, layer_idx);
+            layer_input_size = layer.output_size();
+            layers.push(layer);
+            layer_idx += 1;
+        }
+        let max_buffer_size = layers.iter()
+            .map(NetLayer::weight_buffer_size)
+            .max()
+            .unwrap();
+        Net {
+            input_size: self.input_size,
+            output_size: layers.last().unwrap().output_size(),
+            max_buffer_size,
+            layers
+        }
+
+    }
+
 }
 
 #[derive(Clone, Debug)]
@@ -49,36 +78,6 @@ pub struct Net {
 
 #[allow(dead_code)]
 impl Net {
-
-    pub fn from_config(
-        config: NetConfig,
-        initializer: Box<dyn NetInitializer>
-    ) -> Self {
-
-        assert!(config.input_size > 0);
-        assert!(config.layers.len() > 1);
-
-        let mut layers = Vec::with_capacity(config.layers.len());
-        let mut layer_input_size = config.input_size;
-        let mut layer_idx = 0;
-        let mut initializer = initializer;
-        for ref layer_config in config.layers {
-            let layer = layer_config.create_layer(layer_input_size, layer_idx, initializer.as_mut());
-            layer_input_size = layer.output_size();
-            layers.push(layer);
-            layer_idx += 1;
-        }
-        let max_buffer_size = layers.iter()
-            .map(NetLayer::weight_buffer_size)
-            .max()
-            .unwrap();
-        Net {
-            input_size: config.input_size,
-            output_size: layers.last().unwrap().output_size(),
-            max_buffer_size,
-            layers
-        }
-    }
 
     fn predict_with_buffers(&self, input: &[f32], output: &mut[f32], buffer_a: &mut[f32], buffer_b: &mut[f32]) {
 
@@ -199,6 +198,12 @@ impl Net {
         buf
     }
 
+    pub fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer) {
+        for layer in &mut self.layers {
+            layer.initialize_weights(initializer);
+        }
+    }
+
 }
 
 #[cfg(test)]
@@ -216,10 +221,7 @@ mod test {
             ActivationFn::standard_logistic_sigmoid()
         );
 
-        let mut net = Net::from_config(
-            config,
-            Box::new(RandomNetInitializer::new_standard_from_entropy())
-        );
+        let mut net = config.create_net();
 
         let mut buf = net.new_zeroed_weight_buffer();
         let mut buf2 = net.new_zeroed_weight_buffer();

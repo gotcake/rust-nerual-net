@@ -105,6 +105,7 @@ impl<T> RowBuffer<T> where T: Copy {
 
 impl <T> RowBuffer<T> where T: Copy + std::ops::AddAssign {
 
+    #[allow(dead_code)]
     pub fn add(&mut self, other: &RowBuffer<T>) {
         assert_eq!(self.buffer.len(), other.buffer.len());
         for i in 0..self.buffer.len() {

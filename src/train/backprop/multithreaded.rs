@@ -36,12 +36,11 @@ pub fn train_backprop_multi_threaded(net: &mut Net,
                                  num_partitions: usize) -> (Stats, usize) {
 
     let stage_start_time = SystemTime::now();
-    let mut weight_buffer = net.get_weights();
 
     // shared state
     let shared_state = Arc::new(RwLock::new(SharedThreadState {
         worker_done_counter: 0,
-        weight_buffer,
+        weight_buffer: net.get_weights(),
         next_partition_index: num_workers % num_partitions,
         partition_row_shifts: vec![0; num_partitions]
     }));
