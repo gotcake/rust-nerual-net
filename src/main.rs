@@ -21,7 +21,7 @@ use crate::{
     train::NetTrainerBuilder,
     train::BackpropOptions
 };
-use crate::train::{ParamFactory, NetTrainer, TrainingResult};
+use crate::train::{NetTrainer, TrainingResult, ParamFactory};
 use crate::net::NetConfig;
 use crate::func::{ActivationFn, CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn};
 use crate::data::PreparedDataSet;

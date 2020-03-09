@@ -7,10 +7,11 @@ use crate::{
     },
     stats::Stats
 };
+use std::time::{Duration, SystemTime};
 
 
 pub struct Task {
-    pub id: usize,
+    pub task_id: usize,
     pub training_set: PreparedDataSet,
     pub net: Net,
     pub op: TaskOp,
@@ -26,10 +27,11 @@ quick_error! {
 }
 
 pub struct TaskResult {
-    pub id: usize,
+    pub task_id: usize,
     pub net: Net,
     pub error_stats: Stats,
     pub epoch: usize,
+    pub elapsed: Duration,
 }
 
 pub enum TaskOp {
@@ -38,14 +40,16 @@ pub enum TaskOp {
 
 impl Task {
     pub fn exec(mut self) -> Result<TaskResult, TaskError> {
+        let start_time = SystemTime::now();
         match self.op {
             TaskOp::Backprop(ref options) => {
                 let (error_stats, batch_count) = backprop_stage_task_impl(&mut self.net, &self.training_set, options);
                 Ok(TaskResult {
-                    id: self.id,
+                    task_id: self.task_id,
                     net: self.net,
                     error_stats,
-                    epoch: batch_count
+                    epoch: batch_count,
+                    elapsed: SystemTime::now().duration_since(start_time).unwrap()
                 })
             },
         }
