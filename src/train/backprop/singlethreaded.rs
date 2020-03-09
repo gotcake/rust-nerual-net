@@ -7,11 +7,10 @@ use crate::{
             forward_pass_and_compute_error,
             compute_error_for_batch
         },
-        TrainingContext,
     },
     data::{
-        TrainingSet,
-        TrainingSetIterator
+        PreparedDataSet,
+        PreparedDataSetIterator
     },
     net::Net,
     layer::NetLayerBase,
@@ -26,8 +25,7 @@ use crate::{
 
 pub fn train_backprop_single_threaded(
     net: &mut Net,
-    context: &TrainingContext,
-    training_set: &TrainingSet,
+    training_set: &PreparedDataSet,
     completion_fn: CompletionFn,
     mini_batch_size_fn: MiniBatchSize,
     learning_rate_fn: LearningRateFn,
@@ -46,7 +44,6 @@ pub fn train_backprop_single_threaded(
         train_backprop_single_batch(
             net,
             &mut training_set.iter(),
-            &context,
             &mut buffers,
             mini_batch_size_fn.get_mini_batch_size(batch_num),
             learning_rate,
@@ -56,7 +53,6 @@ pub fn train_backprop_single_threaded(
         compute_error_for_batch(
             net,
             &training_set,
-            &context,
             &error_fn,
             &mut buffers
         );
@@ -75,16 +71,15 @@ pub fn train_backprop_single_threaded(
 
 pub fn train_backprop_single_batch(
     net: &mut Net,
-    iter: &mut TrainingSetIterator,
-    context: &TrainingContext,
+    iter: &mut PreparedDataSetIterator,
     buffers: &mut TrainingBuffers,
     mini_batch_size: Option<usize>,
     learning_rate: f32,
     error_fn: &ErrorFn,
 ) {
 
-    debug_assert!(learning_rate > 0.0 && learning_rate <= 10.0);
     debug_assert!(iter.has_next());
+    debug_assert!(learning_rate > 0.0 && learning_rate <= 10.0);
 
     while iter.has_next() {
 
@@ -92,16 +87,19 @@ pub fn train_backprop_single_batch(
 
         buffers.weight_deltas.reset_to(0.0);
 
-        let mut epochs = match mini_batch_size {
+        let mut remaining_epochs = match mini_batch_size {
             None => -1,
             Some(size) => size as i64,
         };
-        while epochs != 0 && iter.next() {
+
+        while remaining_epochs != 0 && iter.has_next() {
+
+            let (inputs, expected_outputs) = iter.next_unchecked();
 
             forward_pass_and_compute_error(
                 net,
-                &iter,
-                context,
+                inputs,
+                expected_outputs,
                 error_fn,
                 buffers,
             );
@@ -121,14 +119,16 @@ pub fn train_backprop_single_batch(
 
             net.first_layer().backprop(
                 buffers.error_gradient_buffers.get_first_row(),
-                buffers.input_buffer.as_slice(),
+                inputs,
                 buffers.output_buffers.get_first_row(),
                 learning_rate,
                 buffers.input_error_buffer.as_mut_slice(),
                 buffers.weight_deltas.get_first_row_mut(),
             );
 
-            epochs -= 1;
+            if remaining_epochs > 0 {
+                remaining_epochs -= 1;
+            }
         }
 
         // apply weight updates

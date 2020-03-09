@@ -3,7 +3,7 @@ use rand::{Rng, FromEntropy, SeedableRng};
 use crate::{
     func::CompletionFn,
     net::{Net, NetConfig},
-    data::{TrainingSet, ColumnSelection},
+    data::PreparedDataSet,
     stats::Stats,
     train::{
         BackpropOptions,
@@ -107,9 +107,7 @@ pub enum NetTrainerMode {
 #[derive(Builder)]
 #[builder(pattern = "owned")]
 pub struct NetTrainer {
-    training_set: TrainingSet,
-    dependent_columns: ColumnSelection,
-    independent_columns: ColumnSelection,
+    training_set: PreparedDataSet,
     #[builder(default = "Executor::Local(1)")]
     executor: Executor,
     #[builder(default = "Box::new(default_optimizer_factory)")]
@@ -265,8 +263,6 @@ impl NetTrainer {
         Task {
             id: task_id,
             training_set: self.training_set.clone(),
-            independent_columns: self.independent_columns.clone(),
-            dependent_columns: self.dependent_columns.clone(),
             net,
             op: TaskOp::Backprop(backprop_options)
         }

@@ -1,29 +1,26 @@
 use crate::{
-    data::{TrainingSetIterator, TrainingSet},
+    data::PreparedDataSet,
     net::Net,
-    train::{
-        buffers::TrainingBuffers,
-        TrainingContext
-    },
-    layer::NetLayerBase
+    train::buffers::TrainingBuffers,
+    layer::NetLayerBase,
+    func::ErrorFn
 };
-use crate::func::ErrorFn;
 
 pub fn forward_pass_and_compute_error(
     net: &Net,
-    iter: &TrainingSetIterator,
-    context: &TrainingContext,
+    inputs: &[f32],
+    expected_outputs: &[f32],
     error_fn: &ErrorFn,
     buffers: &mut TrainingBuffers,
 ) {
 
-    iter.get_columns(&context.dependent_columns, buffers.input_buffer.as_mut_slice());
-    iter.get_columns(&context.independent_columns, buffers.expected_output_buffer.as_mut_slice());
+    debug_assert_eq!(net.first_layer().input_size(), inputs.len());
+    debug_assert_eq!(net.last_layer().output_size(), expected_outputs.len());
 
     // forward pass
     {
         let layer_output = buffers.output_buffers.get_first_row_mut();
-        net.first_layer().forward_pass(buffers.input_buffer.as_slice(), layer_output);
+        net.first_layer().forward_pass(inputs, layer_output);
     }
 
     for layer_index in 1..net.num_layers() {
@@ -37,8 +34,8 @@ pub fn forward_pass_and_compute_error(
         let last_error_grad_buffer = buffers.error_gradient_buffers.get_last_row_mut();
         let output = buffers.output_buffers.get_last_row();
         for output_index in 0..net.output_size() {
-            error_sum += error_fn.get_error(buffers.expected_output_buffer[output_index], output[output_index]);
-            last_error_grad_buffer[output_index] = error_fn.get_error_derivative(buffers.expected_output_buffer[output_index], output[output_index]);
+            error_sum += error_fn.get_error(expected_outputs[output_index], output[output_index]);
+            last_error_grad_buffer[output_index] = error_fn.get_error_derivative(expected_outputs[output_index], output[output_index]);
         }
         buffers.error_stats.report(error_sum);
     }
@@ -46,18 +43,16 @@ pub fn forward_pass_and_compute_error(
 
 pub fn compute_error_for_batch(
     net: &mut Net,
-    data: &TrainingSet,
-    context: &TrainingContext,
+    data: &PreparedDataSet,
     error_fn: &ErrorFn,
     buffers: &mut TrainingBuffers,
 ) {
     buffers.error_stats.reset();
-    let mut iter = data.iter();
-    while iter.next() {
+    for (inputs, expected_outputs) in data {
         forward_pass_and_compute_error(
             net,
-            &iter,
-            context,
+            inputs,
+            expected_outputs,
             error_fn,
             buffers
         );

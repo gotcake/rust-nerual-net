@@ -24,8 +24,7 @@ pub enum NetLayerConfig {
 impl NetLayerConfig {
     pub fn create_layer(
         &self,
-        input_size: usize,
-        layer_idx: usize
+        input_size: usize
     ) -> NetLayer {
         match self {
             &NetLayerConfig::FullyConnected(size, activation_fn) => {
@@ -33,7 +32,6 @@ impl NetLayerConfig {
                     FullyConnectedNetLayer::new(
                         input_size,
                         size,
-                        layer_idx,
                         activation_fn
                     )
                 )
@@ -140,7 +138,6 @@ impl FullyConnectedNetLayer {
     pub fn new(
         input_size: usize,
         size: usize,
-        layer_index: usize,
         activation_fn: ActivationFn
     ) -> Self {
         FullyConnectedNetLayer {

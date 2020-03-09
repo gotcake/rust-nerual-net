@@ -1,4 +1,6 @@
 use std::u128;
+use std::collections::HashSet;
+use std::hash::Hash;
 
 #[inline(always)]
 pub fn square_f32(n: f32) -> f32 {
@@ -16,4 +18,65 @@ pub fn stable_hash_seed(s: &str) -> [u8; 16] {
     unsafe {
         std::mem::transmute::<u128, [u8; 16]>(val)
     }
+}
+
+pub fn into_string_vec<T, I>(val: T) -> Vec<String> where T: AsRef<[I]>, I: ToString {
+    val.as_ref()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+pub fn first_duplicate<'a, T, I>(iter: T) -> Option<&'a I> where T: Iterator<Item=&'a I>, I: Eq + Hash + 'a {
+    let mut set = HashSet::<&'a I>::new();
+    for item in iter {
+        if !set.insert(item) {
+            return Some(item);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_into_string_vec() {
+        assert_eq!(into_string_vec(["foo", "bar"]), vec!["foo".to_string(), "bar".to_string()]);
+        assert_eq!(into_string_vec(vec!["foo".to_string(), "bar".to_string()]), vec!["foo".to_string(), "bar".to_string()]);
+    }
+
+    #[test]
+    fn test_first_duplicate() {
+        assert_eq!(
+            first_duplicate([1, 2, 3].iter()),
+            None
+        );
+        assert_eq!(
+            first_duplicate([1, 2, 3, 2].iter()),
+            Some(&2)
+        );
+        assert_eq!(
+            first_duplicate(["foo", "bar"].iter()),
+            None
+        );
+        assert_eq!(
+            first_duplicate(["foo", "bar", "foo"].iter()),
+            Some(&"foo")
+        );
+        assert_eq!(
+            first_duplicate(into_string_vec(["foo", "bar"]).iter()),
+            None
+        );
+        let mut vec = into_string_vec(["foo", "bar"]);
+        let mut s = "fo".to_string();
+        s.push('o');
+        vec.push(s);
+        assert_eq!(
+            first_duplicate(vec.iter()),
+            Some(&"foo".to_string())
+        );
+    }
+
 }

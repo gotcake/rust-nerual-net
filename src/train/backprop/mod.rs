@@ -5,8 +5,7 @@ use self::multithreaded::*;
 use self::singlethreaded::*;
 use crate::{
     net::Net,
-    train::TrainingContext,
-    data::TrainingSet,
+    data::PreparedDataSet,
     func::{CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn},
     stats::Stats
 };
@@ -29,8 +28,7 @@ pub struct BackpropMultithreadingOptions {
 
 pub fn backprop_stage_task_impl(
     net: &mut Net,
-    context: &TrainingContext,
-    training_set: &TrainingSet,
+    training_set: &PreparedDataSet,
     options: &BackpropOptions,
 ) -> (Stats, usize) {
 
@@ -46,7 +44,6 @@ pub fn backprop_stage_task_impl(
 
         train_backprop_multi_threaded(
             net,
-            context,
             training_set,
             options.completion_fn,
             options.mini_batch_size_fn,
@@ -61,7 +58,6 @@ pub fn backprop_stage_task_impl(
 
         train_backprop_single_threaded(
             net,
-            context,
             training_set,
             options.completion_fn,
             options.mini_batch_size_fn,

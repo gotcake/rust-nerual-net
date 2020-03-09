@@ -47,12 +47,10 @@ impl NetConfig {
 
         let mut layers = Vec::with_capacity(self.layers.len());
         let mut layer_input_size = self.input_size;
-        let mut layer_idx = 0;
         for layer_config in &self.layers {
-            let layer = layer_config.create_layer(layer_input_size, layer_idx);
+            let layer = layer_config.create_layer(layer_input_size);
             layer_input_size = layer.output_size();
             layers.push(layer);
-            layer_idx += 1;
         }
         let max_buffer_size = layers.iter()
             .map(NetLayer::weight_buffer_size)

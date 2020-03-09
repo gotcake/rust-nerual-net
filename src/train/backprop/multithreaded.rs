@@ -14,26 +14,26 @@ use crate::{
     train::{
         error::compute_error_for_batch,
         buffers::TrainingBuffers,
-        TrainingContext,
         backprop::singlethreaded::train_backprop_single_batch
     },
     net::Net,
-    data::TrainingSet,
+    data::PreparedDataSet,
     func::{CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn},
     stats::Stats
 };
 use crate::buffer::RowBuffer;
 
-pub fn train_backprop_multi_threaded(net: &mut Net,
-                                 context: &TrainingContext,
-                                 training_set: &TrainingSet,
-                                 completion_fn: CompletionFn,
-                                 mini_batch_size_fn: MiniBatchSize,
-                                 learning_rate_fn: LearningRateFn,
-                                 error_fn: ErrorFn,
-                                 batches_per_sync: usize,
-                                 num_workers: usize,
-                                 num_partitions: usize) -> (Stats, usize) {
+pub fn train_backprop_multi_threaded(
+    net: &mut Net,
+    training_set: &PreparedDataSet,
+    completion_fn: CompletionFn,
+    mini_batch_size_fn: MiniBatchSize,
+    learning_rate_fn: LearningRateFn,
+    error_fn: ErrorFn,
+    batches_per_sync: usize,
+    num_workers: usize,
+    num_partitions: usize
+) -> (Stats, usize) {
 
     let stage_start_time = SystemTime::now();
 
@@ -57,7 +57,6 @@ pub fn train_backprop_multi_threaded(net: &mut Net,
         let mut local_net = net.clone();
         //let training_set = training_set.clone();//partitioned_training_sets.pop().unwrap();
         let partitioned_training_sets = training_set.clone().partition(num_partitions);
-        let context = context.clone();
         let stage_complete_flag = stage_complete_flag.clone();
 
         thread::spawn(move || {
@@ -94,7 +93,6 @@ pub fn train_backprop_multi_threaded(net: &mut Net,
                     train_backprop_single_batch(
                         &mut local_net,
                         &mut training_set.iter(),
-                        &context,
                         &mut buffers,
                         mini_batch_size_fn.get_mini_batch_size(batch_num),
                         learning_rate_fn.get_learning_rate(batch_num),
@@ -169,7 +167,6 @@ pub fn train_backprop_multi_threaded(net: &mut Net,
             compute_error_for_batch(
                 net,
                 &training_set,
-                &context,
                 &error_fn,
                 &mut buffers
             );

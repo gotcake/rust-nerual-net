@@ -9,8 +9,6 @@ use crate::{
 
 
 pub struct TrainingBuffers {
-    pub input_buffer: Vec<f32>,
-    pub expected_output_buffer: Vec<f32>,
     pub output_buffers: RowBuffer<f32>,
     pub error_gradient_buffers: RowBuffer<f32>,
     pub input_error_buffer: Vec<f32>,
@@ -24,8 +22,6 @@ impl TrainingBuffers {
             .map(NetLayerBase::output_size)
             .collect();
         TrainingBuffers {
-            input_buffer: vec![0f32; net.input_size()],
-            expected_output_buffer: vec![0f32; net.output_size()],
             output_buffers: RowBuffer::new_with_row_sizes(0.0, &layer_sizes),
             error_gradient_buffers: RowBuffer::new_with_row_sizes(0.0, &layer_sizes),
             input_error_buffer: vec![0f32; net.input_size()],

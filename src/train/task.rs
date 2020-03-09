@@ -1,8 +1,7 @@
 use crate::{
-    data::{TrainingSet, ColumnSelection},
+    data::PreparedDataSet,
     net::Net,
     train::{
-        TrainingContext,
         BackpropOptions,
         backprop::backprop_stage_task_impl
     },
@@ -12,9 +11,7 @@ use crate::{
 
 pub struct Task {
     pub id: usize,
-    pub training_set: TrainingSet,
-    pub independent_columns: ColumnSelection,
-    pub dependent_columns: ColumnSelection,
+    pub training_set: PreparedDataSet,
     pub net: Net,
     pub op: TaskOp,
 }
@@ -43,11 +40,7 @@ impl Task {
     pub fn exec(mut self) -> Result<TaskResult, TaskError> {
         match self.op {
             TaskOp::Backprop(ref options) => {
-                let context = TrainingContext {
-                    dependent_columns: self.dependent_columns,
-                    independent_columns: self.independent_columns
-                };
-                let (error_stats, batch_count) = backprop_stage_task_impl(&mut self.net, &context, &self.training_set, options);
+                let (error_stats, batch_count) = backprop_stage_task_impl(&mut self.net, &self.training_set, options);
                 Ok(TaskResult {
                     id: self.id,
                     net: self.net,

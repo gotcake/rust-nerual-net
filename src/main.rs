@@ -18,27 +18,27 @@ use std::error::Error;
 use std::time::Duration;
 
 use crate::{
-    data::TrainingSet,
     train::NetTrainerBuilder,
     train::BackpropOptions
 };
 use crate::train::{ParamFactory, NetTrainer, TrainingResult};
 use crate::net::NetConfig;
 use crate::func::{ActivationFn, CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn};
+use crate::data::PreparedDataSet;
 
 fn main() -> Result<(), Box<dyn Error>> {
 
 
     //let seed = [0x1235, 0x5663, 0x8392, 0x1211];
 
-    let training_set = TrainingSet::new_from_csv("data/2x2_lines_binary.csv")?;
-    let independent_columns = training_set.get_named_column_selection(&vec!["0_0", "0_1", "1_0", "1_1"])?;
-    let dependent_columns = training_set.get_named_column_selection(&vec!["has_horizontal", "has_vertical"])?;
+    let training_set = PreparedDataSet::from_csv(
+        "data/2x2_lines_binary.csv",
+        ["0_0", "0_1", "1_0", "1_1"],
+        ["has_horizontal", "has_vertical"]
+    )?;
 
     let mut net_trainer: NetTrainer = NetTrainerBuilder::default()
         .training_set(training_set)
-        .independent_columns(independent_columns)
-        .dependent_columns(dependent_columns)
         .net_config_factory(Box::new(net_factory))
         .backprop_options_factory(Box::new(backprop_options_factory))
         .build()?;
