@@ -1,15 +1,16 @@
-use core::slice;
+use std::slice;
+use std::cell::RefCell;
 
-use crate::{
-    layer::{
-        NetLayer,
-        NetLayerBase,
-        NetLayerConfig,
-    },
-    buffer::RowBuffer,
-    initializer::RandomNetInitializer,
-    func::ActivationFn,
-};
+use crate::layer::NetLayer;
+use crate::layer::NetLayerBase;
+use crate::layer::NetLayerConfig;
+use crate::buffer::RowBuffer;
+use crate::initializer::RandomNetInitializer;
+use crate::func::ActivationFn;
+use crate::utils::split_slice_mut;
+use crate::func::ErrorFn;
+use crate::train::NetTrainingContext;
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NetConfig {
@@ -42,26 +43,16 @@ impl NetConfig {
 
     pub fn create_net(&self) -> Net {
 
-        assert!(self.input_size > 0);
-        assert!(self.layers.len() > 0);
-
         let mut layers = Vec::with_capacity(self.layers.len());
         let mut layer_input_size = self.input_size;
+
         for layer_config in &self.layers {
             let layer = layer_config.create_layer(layer_input_size);
             layer_input_size = layer.output_size();
             layers.push(layer);
         }
-        let max_buffer_size = layers.iter()
-            .map(NetLayer::weight_buffer_size)
-            .max()
-            .unwrap();
-        Net {
-            input_size: self.input_size,
-            output_size: layers.last().unwrap().output_size(),
-            max_buffer_size,
-            layers
-        }
+
+        Net::new(self.input_size, layers)
 
     }
 
@@ -69,62 +60,80 @@ impl NetConfig {
 
 #[derive(Clone, Debug)]
 pub struct Net {
+    weight_buffer: RowBuffer,
     input_size: usize,
     output_size: usize,
-    max_buffer_size: usize,
     layers: Vec<NetLayer>,
+    prediction_buffers: RefCell<RowBuffer>, // RefCell is needed to allow mutable borrow
 }
 
 #[allow(dead_code)]
-impl Net {
+impl<'a> Net {
 
-    // TODO:
-    // Consider using contiguous memory as the backing store for weights.
-    // Will probably need some wild unsafe code to make it work, but it will help with
-    // Cache locality and writing data to and from a weight buffer.
+    fn new(input_size: usize, layers: Vec<NetLayer>) -> Self {
 
-    fn predict_with_buffers(&self, input: &[f32], output: &mut[f32], buffer_a: &mut[f32], buffer_b: &mut[f32]) {
+        assert!(input_size > 0);
+        assert!(layers.len() > 0);
+
+        for layer in &layers {
+            assert!(layer.input_size() > 0);
+            assert!(layer.output_size() > 0);
+        }
+
+        let row_buffer_sizes: Vec<usize> = layers.iter()
+            .map(NetLayer::weight_buffer_size)
+            .collect();
+
+        let weight_buffer = RowBuffer::new_with_row_sizes(0.0, row_buffer_sizes);
+        let max_output_size = layers.iter().map(NetLayer::output_size).max().unwrap();
+
+        Net {
+            weight_buffer,
+            input_size,
+            output_size: layers.last().unwrap().output_size(),
+            layers,
+            prediction_buffers: RefCell::new(RowBuffer::new_with_row_sizes(0.0, [max_output_size, max_output_size])),
+        }
+
+    }
+
+    fn predict_with(&mut self, input: &[f32], output: &mut[f32]) {
 
         let num_layers = self.layers.len();
 
         debug_assert_eq!(input.len(), self.input_size);
         debug_assert_eq!(output.len(), self.output_size);
-        debug_assert!(buffer_a.len() >= self.max_buffer_size);
-        debug_assert!(buffer_b.len() >= self.max_buffer_size);
 
         // TODO: handle 1 layer??
         debug_assert!(num_layers > 1);
 
+        let mut prediction_buffers = self.prediction_buffers.borrow_mut();
+        let (mut input_buffer, mut output_buffer) = prediction_buffers.split_rows(0, 1);
 
-        let mut input_buffer = buffer_a;
-        let mut output_buffer = buffer_b;
-
-        self.layers[0].forward_pass(
+        self.first_layer().forward_pass(
+            self.weight_buffer.get_first_row(),
             input,
             input_buffer,
         );
         for row_index in 1..num_layers-1 {
-            self.layers[row_index].forward_pass(
+            self.layer(row_index).forward_pass(
+                self.weight_buffer.get_row(row_index),
                 input_buffer,
                 output_buffer,
             );
             std::mem::swap(&mut input_buffer, &mut output_buffer);
         }
-        self.layers[num_layers - 1].forward_pass(
+        self.last_layer().forward_pass(
+            self.weight_buffer.get_last_row(),
             input_buffer,
             output,
         );
 
     }
 
-    pub fn predict(&self, input: Vec<f32>) -> Vec<f32> {
+    pub fn predict(&mut self, input: impl AsRef<[f32]>) -> Vec<f32> {
         let mut output = vec![0f32; self.output_size];
-        self.predict_with_buffers(
-            input.as_slice(),
-            output.as_mut_slice(),
-            vec![0f32; self.max_buffer_size].as_mut_slice(),
-            vec![0f32; self.max_buffer_size].as_mut_slice()
-        );
+        self.predict_with(input.as_ref(), output.as_mut_slice());
         output
     }
 
@@ -137,6 +146,7 @@ impl Net {
     pub fn layer(&self, index: usize) -> &NetLayer {
         &self.layers[index]
     }
+
     #[inline]
     pub fn first_layer(&self) -> &NetLayer {
         &self.layers[0]
@@ -167,46 +177,26 @@ impl Net {
         self.output_size
     }
 
-    #[inline]
-    pub fn max_buffer_size(&self) -> usize { self.max_buffer_size }
-
-    pub fn store_weights_into(&self, buffer: &mut RowBuffer<f32>) {
-        debug_assert_eq!(buffer.num_rows(), self.layers.len());
-        for i in 0..self.layers.len() {
-            self.layers[i].store_weights_into(buffer.get_row_mut(i));
-        }
-    }
-
-    pub fn load_weights_from(&mut self, buffer: &RowBuffer<f32>) {
-        debug_assert_eq!(buffer.num_rows(), self.layers.len());
-        for i in 0..self.layers.len() {
-            self.layers[i].load_weights_from(buffer.get_row(i));
-        }
-    }
-
-    pub fn add_weights_from(&mut self, buffer: &RowBuffer<f32>) {
-        debug_assert_eq!(buffer.num_rows(), self.layers.len());
-        for i in 0..self.layers.len() {
-            self.layers[i].add_weights_from(buffer.get_row(i));
-        }
-    }
-
-    pub fn new_zeroed_weight_buffer(&self) -> RowBuffer<f32> {
+    pub(crate) fn new_zeroed_weight_buffer(&self) -> RowBuffer {
         let layer_sizes: Vec<usize> = self.layer_iter()
             .map(NetLayer::weight_buffer_size)
             .collect();
         RowBuffer::new_with_row_sizes(0.0, layer_sizes)
     }
 
-    pub fn get_weights(&self) -> RowBuffer<f32> {
-        let mut buf = self.new_zeroed_weight_buffer();
-        self.store_weights_into(&mut buf);
-        buf
+    #[inline]
+    pub fn get_weights(&self) -> &RowBuffer {
+        &self.weight_buffer
+    }
+
+    #[inline]
+    pub fn get_weights_mut(&mut self) -> &mut RowBuffer {
+        &mut self.weight_buffer
     }
 
     pub fn initialize_weights(&mut self, initializer: &mut RandomNetInitializer) {
-        for layer in &mut self.layers {
-            layer.initialize_weights(initializer);
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            layer.initialize_weights(self.weight_buffer.get_row_mut(i), initializer);
         }
     }
 
@@ -218,6 +208,10 @@ impl Net {
             input_size: self.input_size,
             layers
         }
+    }
+
+    pub fn get_training_context(&'a mut self) -> NetTrainingContext<'a> {
+        NetTrainingContext::new(self)
     }
 
 }
@@ -249,8 +243,8 @@ mod test {
             *element = i as f32;
         }
 
-        net.load_weights_from(&buf);
-        net.store_weights_into(&mut buf2);
+        buf.copy_into(net.get_weights_mut());
+        net.get_weights().copy_into(&mut buf2);
 
         for (i, element) in buf2.get_buffer().iter().enumerate() {
             assert_eq!(i as f32, *element);

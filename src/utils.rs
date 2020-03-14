@@ -1,6 +1,7 @@
 use std::u128;
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::slice;
 
 #[inline(always)]
 pub fn square_f32(n: f32) -> f32 {
@@ -36,6 +37,26 @@ pub fn first_duplicate<'a, T, I>(iter: T) -> Option<&'a I> where T: Iterator<Ite
     }
     None
 }
+
+
+pub fn split_slice_mut<T>(slice: &mut [T], left: usize, right: usize) -> (&mut [T], &mut [T]) {
+    assert_eq!(slice.len(), left + right);
+    let ptr = slice.as_mut_ptr();
+    unsafe {
+        (slice::from_raw_parts_mut(ptr, left),
+         slice::from_raw_parts_mut(ptr.add(left), right))
+    }
+}
+
+pub fn split_slice<T>(slice: &[T], left: usize, right: usize) -> (&[T], &[T]) {
+    assert_eq!(slice.len(), left + right);
+    let ptr = slice.as_ptr();
+    unsafe {
+        (slice::from_raw_parts(ptr, left),
+         slice::from_raw_parts(ptr.add(left), right))
+    }
+}
+
 
 #[cfg(test)]
 mod test {

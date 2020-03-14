@@ -1,31 +1,23 @@
-use std::{
-    sync::{
-        atomic::AtomicBool,
-        RwLock,
-        Arc,
-        atomic::Ordering,
-        mpsc,
-    },
-    thread,
-    time::SystemTime,
-};
+use std::sync::atomic::AtomicBool;
+use std::sync::RwLock;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::sync::mpsc;
+use std::thread;
+use std::time::SystemTime;
 
-use crate::{
-    train::{
-        error::compute_error_for_batch,
-        buffers::TrainingBuffers,
-        backprop::singlethreaded::train_backprop_single_batch
-    },
-    net::Net,
-    data::PreparedDataSet,
-    func::{CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn},
-    stats::Stats
-};
+use crate::net::Net;
+use crate::data::PreparedDataSet;
+use crate::func::CompletionFn;
+use crate::func::MiniBatchSize;
+use crate::func::LearningRateFn;
+use crate::func::ErrorFn;
+use crate::stats::Stats;
 use crate::buffer::RowBuffer;
 
 pub fn train_backprop_multi_threaded(
     net: &mut Net,
-    training_set: &PreparedDataSet,
+    data_set: &PreparedDataSet,
     completion_fn: CompletionFn,
     mini_batch_size_fn: MiniBatchSize,
     learning_rate_fn: LearningRateFn,
@@ -40,7 +32,7 @@ pub fn train_backprop_multi_threaded(
     // shared state
     let shared_state = Arc::new(RwLock::new(SharedThreadState {
         worker_done_counter: 0,
-        weight_buffer: net.get_weights(),
+        weight_buffer: net.get_weights().clone(),
         next_partition_index: num_workers % num_partitions,
         partition_row_shifts: vec![0; num_partitions]
     }));
@@ -56,14 +48,14 @@ pub fn train_backprop_multi_threaded(
         let check_error_sender = check_error_sender.clone();
         let mut local_net = net.clone();
         //let training_set = training_set.clone();//partitioned_training_sets.pop().unwrap();
-        let partitioned_training_sets = training_set.clone().partition(num_partitions);
+        let partitioned_data_sets = data_set.clone().partition(num_partitions);
         let stage_complete_flag = stage_complete_flag.clone();
 
         thread::spawn(move || {
 
             let mut start_weights = local_net.new_zeroed_weight_buffer();
             let mut weight_diffs = local_net.new_zeroed_weight_buffer();
-            let mut buffers = TrainingBuffers::for_net(&local_net);
+            let mut context = local_net.get_training_context();
 
             let mut partition_index = worker_index;
             let mut partition_shift = 0;
@@ -81,22 +73,19 @@ pub fn train_backprop_multi_threaded(
                     // sync weights with shared state
                     let shared_state = shared_state.read().unwrap();
                     shared_state.weight_buffer.copy_into(&mut start_weights);
-                    local_net.load_weights_from(&start_weights);
+                    start_weights.copy_into(context.get_net_mut().get_weights_mut());
                     shared_state.worker_done_counter * batches_per_sync / num_workers
                 };
 
-                let training_set = &partitioned_training_sets[partition_index];
+                let data_set = &partitioned_data_sets[partition_index];
 
                 for _ in 0..batches_per_sync {
 
-                    //let learning_rate = learning_rate_fn.get_learning_rate(batch_num);
-                    train_backprop_single_batch(
-                        &mut local_net,
-                        &mut training_set.iter(),
-                        &mut buffers,
-                        mini_batch_size_fn.get_mini_batch_size(batch_num),
+                    context.train_backprop_single_batch(
+                        data_set,
                         learning_rate_fn.get_learning_rate(batch_num),
                         &error_fn,
+                        mini_batch_size_fn.get_mini_batch_size(batch_num),
                     );
 
                     batch_num += 1;
@@ -109,7 +98,7 @@ pub fn train_backprop_multi_threaded(
                 //shift = (shift + 1) & shift_steps;
 
                 // compute weight diff
-                local_net.store_weights_into(&mut weight_diffs);
+                context.get_net().get_weights().copy_into(&mut weight_diffs);
                 weight_diffs.subtract(&start_weights);
 
                 {
@@ -144,7 +133,7 @@ pub fn train_backprop_multi_threaded(
     {
 
         let mut batch_num = 0;
-        let mut buffers = TrainingBuffers::for_net(net);
+        let mut context = net.get_training_context();
 
         loop {
 
@@ -160,26 +149,25 @@ pub fn train_backprop_multi_threaded(
 
             // load state
             {
+                // TODO: use net weight buffer as state weight buffer to avoid this copy operation?
                 let state = shared_state.read().unwrap();
-                net.load_weights_from(&state.weight_buffer);
+                state.weight_buffer.copy_into(context.get_net_mut().get_weights_mut());
             };
 
-            compute_error_for_batch(
-                net,
-                &training_set,
+            let error_stats = context.compute_error_for_batch(
+                &data_set,
                 &error_fn,
-                &mut buffers
             );
 
-            if completion_fn.should_stop_training(batch_num, stage_start_time, &buffers.error_stats) {
+            if completion_fn.should_stop_training(batch_num, stage_start_time, &error_stats) {
                 // return and close the channel, signaling that we've completed training
                 stage_complete_flag.store(true, Ordering::Relaxed);
-                break;
+                return (error_stats, batch_num)
             }
 
         }
 
-        (buffers.error_stats, batch_num)
+        unreachable!();
 
     }
 
@@ -187,7 +175,7 @@ pub fn train_backprop_multi_threaded(
 
 struct SharedThreadState {
     worker_done_counter: usize,
-    weight_buffer: RowBuffer<f32>,
+    weight_buffer: RowBuffer,
     next_partition_index: usize,
     partition_row_shifts: Vec<usize>
 }

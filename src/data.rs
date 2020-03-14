@@ -104,7 +104,6 @@ impl PreparedDataSet {
         }
 
         let mut row_vals = Vec::with_capacity(n_cols);
-        let num_selected_cols = independent_cols.len() + dependent_cols.len();
         let mut num_rows = 0usize;
         let mut data = Vec::new();
 

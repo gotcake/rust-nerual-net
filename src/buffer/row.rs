@@ -1,89 +1,126 @@
-#[derive(Debug, Clone)]
-pub struct RowBuffer<T: Copy> {
-    buffer: Vec<T>,
-    row_offsets_and_ends: Vec<(usize, usize)>,
+use std::ptr;
+use std::slice;
+use std::fmt;
+
+#[derive(Clone)]
+pub struct RowBuffer {
+    buffer: Box<[f32]>,
+    row_offsets_and_sizes: Box<[(usize, usize)]>,
+}
+
+impl fmt::Debug for RowBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let mut s = &mut f.debug_struct("RowBuffer");
+        if self.buffer.len() < 30 {
+            s = s.field("buffer", &self.buffer);
+        } else {
+            s = s.field("buffer_len", &self.buffer.len());
+        }
+        s.field("row_offsets_and_sizes", &self.row_offsets_and_sizes)
+            .finish()
+    }
 }
 
 #[allow(dead_code)]
-impl<T> RowBuffer<T> where T: Copy {
+impl RowBuffer {
 
-    pub fn new_with_row_sizes(initial_value: T, row_sizes: impl AsRef<[usize]>) -> Self {
+    pub fn new_with_row_sizes(initial_value: f32, row_sizes: impl AsRef<[usize]>) -> Self {
         let row_sizes = row_sizes.as_ref();
         assert!(row_sizes.len() > 0);
         let total_size: usize = row_sizes.iter().sum();
-        let buffer: Vec<T> = vec![initial_value; total_size];
-        let mut row_offsets_and_ends: Vec<(usize, usize)> = Vec::with_capacity(row_sizes.len());
+        let buffer: Vec<f32> = vec![initial_value; total_size];
+        let mut row_offsets_and_sizes: Vec<(usize, usize)> = Vec::with_capacity(row_sizes.len());
         let mut offset: usize = 0;
         for i in 0..row_sizes.len() {
-            let end = offset + row_sizes[i];
-            row_offsets_and_ends.push((offset, end));
-            offset = end;
+            row_offsets_and_sizes.push((offset, row_sizes[i]));
+            offset +=row_sizes[i];
         }
         RowBuffer {
-            buffer,
-            row_offsets_and_ends
+            buffer: buffer.into_boxed_slice(),
+            row_offsets_and_sizes: row_offsets_and_sizes.into_boxed_slice()
         }
     }
 
     #[inline]
-    pub fn get_row(&self, row: usize) -> &[T] {
-        let (offset, end) = self.row_offsets_and_ends[row];
-        &self.buffer[offset..end]
+    pub fn get_row(&self, row: usize) -> &[f32] {
+        let (offset, size) = self.row_offsets_and_sizes[row];
+        //&self.buffer[offset...offset+size]
+        unsafe { slice::from_raw_parts(self.buffer.as_ptr().add(offset), size) }
     }
 
     #[inline]
-    pub fn get_row_mut(&mut self, row: usize) -> &mut [T] {
-        let (offset, end) = self.row_offsets_and_ends[row];
-        &mut self.buffer[offset..end]
+    pub fn get_row_mut(&mut self, row: usize) -> &mut [f32] {
+        let (offset, size) = self.row_offsets_and_sizes[row];
+        unsafe { slice::from_raw_parts_mut(self.buffer.as_mut_ptr().add(offset), size) }
     }
 
     #[inline]
-    pub fn split_rows(&mut self, row_first: usize, row_second: usize) -> (&mut [T], &mut [T]) {
+    pub fn split_rows(&mut self, row_first: usize, row_second: usize) -> (&mut [f32], &mut [f32]) {
         assert_ne!(row_first, row_second);
-        let (offset_first, end_first) = self.row_offsets_and_ends[row_first];
-        let (offset_second, end_second) = self.row_offsets_and_ends[row_second];
+        let (offset_first, size_first) = self.row_offsets_and_sizes[row_first];
+        let (offset_second, size_second) = self.row_offsets_and_sizes[row_second];
         let ptr = self.buffer.as_mut_ptr();
         unsafe {
-            (core::slice::from_raw_parts_mut(ptr.add(offset_first), end_first - offset_first),
-             core::slice::from_raw_parts_mut(ptr.add(offset_second), end_second - offset_second))
+            (slice::from_raw_parts_mut(ptr.add(offset_first), size_first),
+             slice::from_raw_parts_mut(ptr.add(offset_second), size_second))
         }
     }
 
     #[inline]
     pub fn num_rows(&self) -> usize {
-        self.row_offsets_and_ends.len()
+        self.row_offsets_and_sizes.len()
     }
 
     #[inline]
-    pub fn get_last_row(&self) -> &[T] {
-        self.get_row(self.num_rows() - 1)
-    }
-
-    #[inline]
-    pub fn get_last_row_mut(&mut self) -> &mut [T] {
-        self.get_row_mut(self.num_rows() - 1)
-    }
-
-    #[inline]
-    pub fn get_first_row(&self) -> &[T] {
-        self.get_row(0)
-    }
-
-    #[inline]
-    pub fn get_first_row_mut(&mut self) -> &mut [T] {
-        self.get_row_mut(0)
-    }
-
-    pub fn reset_to(&mut self, value: T) {
-        for i in 0..self.buffer.len() {
-            self.buffer[i] = value;
+    pub fn get_last_row(&self) -> &[f32] {
+        unsafe {
+            let (offset, size) = *(self.row_offsets_and_sizes.as_ptr()
+                .add(self.row_offsets_and_sizes.len() - 1));
+            slice::from_raw_parts(self.buffer.as_ptr().add(offset), size)
         }
     }
 
-    pub fn copy_into(&self, target: &mut RowBuffer<T>) {
-        assert_eq!(self.buffer.len(), target.buffer.len());
-        for i in 0..self.buffer.len() {
-            target.buffer[i] = self.buffer[i];
+    #[inline]
+    pub fn get_last_row_mut(&mut self) -> &mut [f32] {
+        unsafe {
+            let (offset, size) = *(self.row_offsets_and_sizes.as_ptr()
+                .add(self.row_offsets_and_sizes.len() - 1));
+            slice::from_raw_parts_mut(self.buffer.as_mut_ptr().add(offset), size)
+        }
+    }
+
+    #[inline]
+    pub fn get_first_row(&self) -> &[f32] {
+        unsafe {
+            let (_offset, size) = *self.row_offsets_and_sizes.as_ptr();
+            slice::from_raw_parts(self.buffer.as_ptr(), size)
+        }
+    }
+
+    #[inline]
+    pub fn get_first_row_mut(&mut self) -> &mut [f32] {
+        unsafe {
+            let (_offset, size) = *self.row_offsets_and_sizes.as_ptr();
+            slice::from_raw_parts_mut(self.buffer.as_mut_ptr(), size)
+        }
+    }
+
+    pub fn reset_to(&mut self, value: f32) {
+        let mut ptr = self.buffer.as_mut_ptr();
+        unsafe {
+            let end = ptr.add(self.buffer.len());
+            while ptr < end {
+                *ptr = value;
+                ptr = ptr.add(1);
+            }
+        }
+    }
+
+    pub fn copy_into(&self, target: &mut RowBuffer) {
+        let size = self.buffer.len();
+        assert_eq!(size, target.buffer.len());
+        unsafe {
+            ptr::copy_nonoverlapping(self.buffer.as_ptr(), target.buffer.as_mut_ptr(), size);
         }
     }
 
@@ -93,50 +130,63 @@ impl<T> RowBuffer<T> where T: Copy {
     }
 
     #[inline]
-    pub fn get_buffer(&self) -> &[T] {
-        self.buffer.as_slice()
+    pub fn get_buffer(&self) -> &[f32] {
+        &self.buffer
     }
 
     #[inline]
-    pub fn get_buffer_mut(&mut self) -> &mut [T] {
-        self.buffer.as_mut_slice()
+    pub fn get_buffer_mut(&mut self) -> &mut [f32] {
+        &mut self.buffer
     }
-
-}
-
-impl <T> RowBuffer<T> where T: Copy + std::ops::AddAssign {
 
     #[allow(dead_code)]
-    pub fn add(&mut self, other: &RowBuffer<T>) {
-        assert_eq!(self.buffer.len(), other.buffer.len());
-        for i in 0..self.buffer.len() {
-            self.buffer[i] += other.buffer[i];
+    pub fn add(&mut self, other: &RowBuffer) {
+        let size = self.buffer.len();
+        assert_eq!(size, other.buffer.len());
+        let mut ptr_self = self.buffer.as_mut_ptr();
+        let mut ptr_other = other.buffer.as_ptr();
+        unsafe {
+            let end = ptr_self.add(size);
+            while ptr_self < end {
+                *ptr_self += *ptr_other;
+                ptr_self = ptr_self.add(1);
+                ptr_other = ptr_other.add(1);
+            }
+        }
+    }
+
+    pub fn add_with_multiplier(&mut self, other: &RowBuffer, multiplier: f32) {
+        let size = self.buffer.len();
+        assert_eq!(size, other.buffer.len());
+        let mut ptr_self = self.buffer.as_mut_ptr();
+        let mut ptr_other = other.buffer.as_ptr();
+        unsafe {
+            let end = ptr_self.add(size);
+            while ptr_self < end {
+                *ptr_self += *ptr_other * multiplier;
+                ptr_self = ptr_self.add(1);
+                ptr_other = ptr_other.add(1);
+            }
+        }
+    }
+
+    pub fn subtract(&mut self, subtract: &RowBuffer) {
+        let size = self.buffer.len();
+        assert_eq!(size, subtract.buffer.len());
+        let mut ptr_self = self.buffer.as_mut_ptr();
+        let mut ptr_other = subtract.buffer.as_ptr();
+        unsafe {
+            let end = ptr_self.add(size);
+            while ptr_self < end {
+                *ptr_self -= *ptr_other;
+                ptr_self = ptr_self.add(1);
+                ptr_other = ptr_other.add(1);
+            }
         }
     }
 
 }
 
-impl <T> RowBuffer<T> where T: Copy + std::ops::AddAssign + std::ops::Mul<Output=T> {
-
-    pub fn add_with_multiplier(&mut self, other: &RowBuffer<T>, multiplier: T) {
-        assert_eq!(self.buffer.len(), other.buffer.len());
-        for i in 0..self.buffer.len() {
-            self.buffer[i] += other.buffer[i] * multiplier;
-        }
-    }
-
-}
-
-impl <T> RowBuffer<T> where T: Copy + std::ops::SubAssign {
-
-    pub fn subtract(&mut self, subtract: &RowBuffer<T>) {
-        assert_eq!(self.buffer.len(), subtract.buffer.len());
-        for i in 0..self.buffer.len() {
-            self.buffer[i] -= subtract.buffer[i];
-        }
-    }
-
-}
 
 #[cfg(test)]
 mod test {
@@ -159,7 +209,7 @@ mod test {
     #[test]
     fn test_basics() {
 
-        let mut buf = RowBuffer::new_with_row_sizes(0usize, vec![1, 0, 10, 2]);
+        let mut buf = RowBuffer::new_with_row_sizes(0.0, vec![1, 0, 10, 2]);
 
         // check for correct structure
         assert_eq!(4, buf.num_rows());
@@ -184,7 +234,7 @@ mod test {
         for i in 0..buf.num_rows() {
             let row = buf.get_row_mut(i);
             for j in 0..row.len() {
-                row[j] = i * 10 + j;
+                row[j] = (i * 10 + j) as f32;
             }
         }
 
@@ -192,7 +242,7 @@ mod test {
         for i in 0..buf.num_rows() {
             let row = buf.get_row(i);
             for j in 0..row.len() {
-                assert_eq!(i * 10 + j, row[j]);
+                assert_eq!(row[j], (i * 10 + j) as f32);
             }
         }
 
@@ -203,7 +253,7 @@ mod test {
         for i in 0..buf.num_rows() {
             let row = buf.get_row(i);
             for j in 0..row.len() {
-                assert_eq!((i * 10 + j) * 2, row[j]);
+                assert_eq!(row[j], ((i * 10 + j) * 2) as f32);
             }
         }
 
@@ -213,17 +263,17 @@ mod test {
         for i in 0..buf.num_rows() {
             let row = buf.get_row(i);
             for j in 0..row.len() {
-                assert_eq!(i * 10 + j, row[j]);
+                assert_eq!(row[j], (i * 10 + j) as f32);
             }
         }
 
-        buf.add_with_multiplier(&buf2, 2);
+        buf.add_with_multiplier(&buf2, 2.0);
 
         // check values
         for i in 0..buf.num_rows() {
             let row = buf.get_row(i);
             for j in 0..row.len() {
-                assert_eq!((i * 10 + j) * 3, row[j]);
+                assert_eq!(row[j], ((i * 10 + j) * 3) as f32);
             }
         }
 
@@ -233,10 +283,24 @@ mod test {
         for i in 0..buf.num_rows() {
             let row = buf.get_row(i);
             for j in 0..row.len() {
-                assert_eq!((i * 10 + j) * 3, row[j]);
+                assert_eq!(row[j], ((i * 10 + j) * 3) as f32);
             }
         }
 
+    }
+
+    #[test]
+    fn test_get_first_last_rows() {
+        let mut buf = RowBuffer::new_with_row_sizes(0.0, vec![15, 0, 8]);
+        for i in 0..buf.buffer_len() {
+            buf.get_buffer_mut()[i] = i as f32;
+        }
+        let first = buf.get_first_row();
+        let last = buf.get_last_row();
+        assert_eq!(first.len(), 15);
+        assert_eq!(last.len(), 8);
+        assert_eq!(first, &[0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14.]);
+        assert_eq!(last, &[15., 16., 17., 18., 19., 20., 21., 22.]);
     }
 
 }
