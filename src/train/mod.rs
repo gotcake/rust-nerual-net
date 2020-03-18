@@ -4,6 +4,7 @@ mod executor;
 mod trainer;
 mod optimizer;
 mod context;
+mod observer;
 
 pub use self::{
     backprop::*,
@@ -11,4 +12,5 @@ pub use self::{
     trainer::*,
     optimizer::*,
     context::*,
+    observer::*,
 };

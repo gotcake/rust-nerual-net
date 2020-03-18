@@ -166,9 +166,7 @@ pub fn train_backprop_multi_threaded(
             }
 
         }
-
-        unreachable!();
-
+        // unreachable
     }
 
 }

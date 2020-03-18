@@ -1,11 +1,16 @@
 use std::{f32, fmt};
+use crate::utils::square_f32;
 
 #[derive(Clone)]
 pub struct Stats {
-    sum: f32,
+    sum: f64,
     count: u32,
     max: f32,
-    min: f32
+    min: f32,
+    // variables for variance computation
+    // see https://stackoverflow.com/a/897463
+    var_m: f64,
+    var_s: f64,
 }
 
 impl fmt::Debug for Stats {
@@ -16,6 +21,7 @@ impl fmt::Debug for Stats {
             .field("max", &self.max)
             .field("sum", &self.sum)
             .field("mean", &self.mean())
+            .field("std_dev", &self.std_dev())
             .finish()
     }
 }
@@ -28,13 +34,15 @@ impl Stats {
             sum: 0.0,
             count: 0,
             max: f32::NAN,
-            min: f32::NAN
+            min: f32::NAN,
+            var_m: 0.0,
+            var_s: 0.0,
         }
     }
 
-    #[inline]
     pub fn report(&mut self, value: f32) {
-        self.sum += value;
+        let val64 = value as f64;
+        self.sum += val64;
         self.count += 1;
         if self.min.is_nan() || self.min > value {
             self.min = value;
@@ -42,11 +50,31 @@ impl Stats {
         if self.max.is_nan() || self.max < value {
             self.max = value;
         }
+        // variance computation
+        // see https://stackoverflow.com/a/897463
+        let val_minus_m = val64 - self.var_m;
+        self.var_m += val_minus_m / self.count as f64;
+        self.var_s += val_minus_m * (val64 - self.var_m);
+
     }
 
     #[inline]
-    pub fn mean(&self) -> f32 {
-        self.sum / self.count as f32
+    pub fn mean(&self) -> f64 {
+        self.sum / self.count as f64
+    }
+
+    #[inline]
+    pub fn variance(&self) -> f64 {
+        if self.count > 1 {
+            self.var_s / self.count as f64
+        } else {
+            0.0
+        }
+    }
+
+    #[inline]
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
     }
 
     #[inline]
@@ -60,7 +88,7 @@ impl Stats {
     }
 
     #[inline]
-    pub fn sum(&self) -> f32 {
+    pub fn sum(&self) -> f64 {
         self.sum
     }
 
@@ -74,6 +102,8 @@ impl Stats {
         self.count = 0;
         self.max = f32::NAN;
         self.min = f32::NAN;
+        self.var_m = 0.0;
+        self.var_s = 0.0;
     }
 }
 
@@ -220,6 +250,7 @@ mod test {
         assert_eq!(s.sum(), 12.5);
         assert_eq!(s.count(), 5);
         assert_eq!(s.mean(), 2.5);
+        assert!((s.std_dev() - 4.0249223594996).abs() < 0.001);
 
     }
 

@@ -1,3 +1,5 @@
+#![feature(slice_index_methods)]
+
 #[macro_use]
 extern crate quick_error;
 
@@ -21,7 +23,7 @@ use crate::{
     train::NetTrainerBuilder,
     train::BackpropOptions
 };
-use crate::train::{NetTrainer, TrainingResult, ParamFactory};
+use crate::train::{NetTrainer, TrainingResult, ParamFactory, TrainingEvent};
 use crate::net::NetConfig;
 use crate::func::{ActivationFn, CompletionFn, MiniBatchSize, LearningRateFn, ErrorFn};
 use crate::data::PreparedDataSet;
@@ -31,16 +33,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //let seed = [0x1235, 0x5663, 0x8392, 0x1211];
 
-    let training_set = PreparedDataSet::from_csv(
+    let data_set = PreparedDataSet::from_csv(
         "data/2x2_lines_binary.csv",
         ["0_0", "0_1", "1_0", "1_1"],
         ["has_horizontal", "has_vertical"]
     )?;
 
     let mut net_trainer: NetTrainer = NetTrainerBuilder::default()
-        .training_set(training_set)
+        .data_set(data_set)
         .net_config_factory(Box::new(net_factory))
         .backprop_options_factory(Box::new(backprop_options_factory))
+        .observer(Box::new(observer_callback))
         .build()?;
 
     let result: TrainingResult = net_trainer.execute()?;
@@ -48,6 +51,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("duration = {}s, error_stats = {:?}", result.duration.as_secs_f32(), &result.error_stats);
 
     Ok(())
+
+}
+
+
+fn observer_callback(event: &TrainingEvent) {
 
 }
 

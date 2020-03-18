@@ -144,7 +144,7 @@ impl NetLayerBase for FullyConnectedNetLayer {
         for node_index in 0..self.size {
             let mut sum = biases[node_index];
             for input_index in 0..self.input_size {
-                sum = sum + input[input_index] * self.get_weight(weights, input_index, node_index);
+                sum += input[input_index] * self.get_weight(weights, input_index, node_index);
             }
             output[node_index] = self.activation_fn.get_activation(sum);
         }
@@ -175,17 +175,16 @@ impl NetLayerBase for FullyConnectedNetLayer {
             for input_index in 0..self.input_size {
                 let input = inputs[input_index];
                 let connection_weight = self.get_weight(weights, input_index, node_index);
+                // TODO: should this be multiplied by connection_weight???
                 let weight_delta = -learning_rate * node_error_gradient * input;
                 //let new_weight = connection_weight + weight_delta;
-                // TODO
                 weight_deltas[input_index * self.size + node_index] += weight_delta;
                 // self.set_weight(input_index, node_index, new_weight);
                 input_errors[input_index] += connection_weight * node_error_gradient;
             }
             // update bias
-            // TODO, not sure if this should be multiplied by bias value such as weight_delta
+            // TODO, not sure if this should be multiplied by bias value like weight_delta
             bias_deltas[node_index] -= learning_rate * node_error_gradient;
-            // TODO self.biases[node_index] -= learning_rate * node_error_gradient;
         }
     }
 
@@ -205,11 +204,11 @@ impl NetLayerBase for FullyConnectedNetLayer {
     fn initialize_weights(&self, weight_buffer: &mut [f32], initializer: &mut RandomNetInitializer) {
         let (weights, biases) = split_slice_mut(weight_buffer, self.num_weights, self.size);
 
-        for i in 0..weights.len() {
-            weights[i] = initializer.get_weight();
+        for weight in weights.iter_mut() {
+            *weight = initializer.get_weight();
         }
-        for i in 0..biases.len() {
-            biases[i] = initializer.get_bias();
+        for bias in biases.iter_mut() {
+            *bias = initializer.get_bias();
         }
     }
 

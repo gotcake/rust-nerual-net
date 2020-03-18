@@ -10,22 +10,23 @@ pub trait ParamFactory {
 }
 
 pub trait Optimizer {
-    fn next_parameters(&mut self, id: usize) -> Box<dyn ParamFactory>;
+    fn next_parameters(&mut self, id: &str) -> Box<dyn ParamFactory>;
     fn report(&mut self, results: &TaskResult);
 }
 
+#[derive(Clone)]
 pub struct RandomOptimizer {
     rng: Rc<RefCell<rand_xorshift::XorShiftRng>>
 }
 
 impl RandomOptimizer {
-    pub fn new_from_entropy() -> Self {
+    pub fn from_entropy() -> Self {
         RandomOptimizer {
             rng: Rc::new(RefCell::new(rand_xorshift::XorShiftRng::from_entropy()))
         }
     }
     #[allow(dead_code)]
-    pub fn new_from_seed(seed: &str) -> Self {
+    pub fn from_seed(seed: &str) -> Self {
         let seed_bytes = stable_hash_seed(seed);
         RandomOptimizer {
             rng: Rc::new(RefCell::new(rand_xorshift::XorShiftRng::from_seed(seed_bytes)))
@@ -35,7 +36,7 @@ impl RandomOptimizer {
 
 impl Optimizer for RandomOptimizer {
 
-    fn next_parameters(&mut self, _id: usize) -> Box<dyn ParamFactory> {
+    fn next_parameters(&mut self, _id: &str) -> Box<dyn ParamFactory> {
         Box::new(RandomParamFactory {
             rng: self.rng.clone(),
         })

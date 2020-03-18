@@ -23,6 +23,7 @@ use std::{
     }
 };
 use crossbeam::internal::SelectHandle;
+use crate::train::task::{TaskUpdate, TaskUpdateEmitter};
 
 
 quick_error! {
@@ -78,7 +79,8 @@ impl ExecutorInstance for LocalExecutor {
         let (ctrl_master, ctrl_slave) = executor_control();
         self.stopped.store(false, Ordering::Relaxed);
 
-        for _ in 0..self.num_workers {
+        for worker_idx in 0..self.num_workers {
+            let executor_id = format!("local_executor_{}", worker_idx);
             let ctrl_slave = ctrl_slave.clone();
             let stopped_flag = self.stopped.clone();
             thread::spawn(move || {
@@ -88,14 +90,17 @@ impl ExecutorInstance for LocalExecutor {
 
                         // try to get next task
                         let task = ctrl_slave.get_next_task()?;
+                        let task_id = task.task_id.clone();
+
+                        ctrl_slave.accept_task(executor_id.clone(), task.task_id.clone())?;
 
                         // execute task
-                        match task.exec() {
+                        match task.exec(&ctrl_slave) {
                             Ok(result) => {
-                                ctrl_slave.results_sender.send(Ok(result))?;
+                                ctrl_slave.send_result(result)?;
                             },
                             Err(err) => {
-                                ctrl_slave.results_sender.send(Err(ExecutorError::TaskError(err)))?;
+                                ctrl_slave.send_err(task_id, executor_id.clone(), ExecutorError::TaskError(err))?;
                             },
                         }
                     }
@@ -103,6 +108,7 @@ impl ExecutorInstance for LocalExecutor {
                 };
                 // if a channel-based error occurred, signal all to stop
                 if inner_fn().is_err() {
+                    // TODO: log error?
                     stopped_flag.store(true, Ordering::Relaxed);
                 }
             });
@@ -119,22 +125,36 @@ impl ExecutorInstance for LocalExecutor {
 fn executor_control() -> (ExecutorControlMaster, ExecutorControlSlave) {
     // A zero-sized mpmc (though used as spmr) channel for sending tasks to executor workers
     let (task_sender, task_receiver) = crossbeam::channel::bounded(0);
-    // An unbounded mpsc channel for sending results back to the driver
-    let (results_sender, results_receiver) = mpsc::channel();
+    // An unbounded mpsc channel for sending results back to the
+    let (event_sender, event_receiver) = mpsc::channel();
     let master = ExecutorControlMaster {
         task_sender,
-        results_receiver,
+        event_receiver,
     };
     let slave = ExecutorControlSlave {
         task_receiver,
-        results_sender,
+        event_sender,
     };
     (master, slave)
 }
 
+pub enum ExecutorEvent {
+    TaskAccepted {
+        task_id: String,
+        executor_id: String,
+    },
+    TaskResult(TaskResult),
+    ExecutorError {
+        task_id: String,
+        executor_id: String,
+        error: ExecutorError,
+    },
+    TaskUpdate(TaskUpdate),
+}
+
 pub struct ExecutorControlMaster {
     task_sender: crossbeam::channel::Sender<Task>,
-    results_receiver: Receiver<Result<TaskResult, ExecutorError>>,
+    event_receiver: Receiver<ExecutorEvent>,
 }
 
 impl ExecutorControlMaster {
@@ -150,8 +170,8 @@ impl ExecutorControlMaster {
         Ok(())
     }
 
-    pub fn try_get_results(&self) -> TryIter<Result<TaskResult, ExecutorError>> {
-        self.results_receiver.try_iter()
+    pub fn try_get_events(&self) -> TryIter<ExecutorEvent> {
+        self.event_receiver.try_iter()
     }
 
 }
@@ -159,14 +179,31 @@ impl ExecutorControlMaster {
 #[derive(Clone)]
 pub struct ExecutorControlSlave {
     task_receiver: crossbeam::channel::Receiver<Task>,
-    results_sender: Sender<Result<TaskResult, ExecutorError>>,
+    event_sender: Sender<ExecutorEvent>,
 }
 
 #[allow(dead_code)]
 impl ExecutorControlSlave {
 
-    fn send_results(&self, result: Result<TaskResult, ExecutorError>) -> Result<(), Box<dyn Error>> {
-        self.results_sender.send(result)?;
+    fn send_result(&self, result: TaskResult) -> Result<(), Box<dyn Error>> {
+        self.event_sender.send(ExecutorEvent::TaskResult(result))?;
+        Ok(())
+    }
+
+    fn send_err(&self, task_id: String, executor_id: String, error: ExecutorError) -> Result<(), Box<dyn Error>> {
+        self.event_sender.send(ExecutorEvent::ExecutorError {
+            task_id,
+            executor_id,
+            error
+        })?;
+        Ok(())
+    }
+
+    fn accept_task(&self, executor_id: String, task_id: String) -> Result<(), Box<dyn Error>> {
+        self.event_sender.send(ExecutorEvent::TaskAccepted {
+            executor_id,
+            task_id
+        })?;
         Ok(())
     }
 
@@ -174,4 +211,12 @@ impl ExecutorControlSlave {
         Ok(self.task_receiver.recv()?)
     }
 
+}
+
+impl TaskUpdateEmitter for ExecutorControlSlave {
+    fn emit_update(&self, update: TaskUpdate) {
+        if self.event_sender.send(ExecutorEvent::TaskUpdate(update)).is_err() {
+            // TODO: log error... or propagate?
+        }
+    }
 }

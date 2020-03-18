@@ -27,7 +27,7 @@ impl CompletionFn {
     }
 
     pub fn should_stop_training(&self, epoch: usize, start_time: SystemTime, error_stats: &Stats) -> bool {
-        if self.target_avg_error >= error_stats.mean() {
+        if self.target_avg_error as f64 >= error_stats.mean() {
             return true;
         }
         if let Some(max_batch_count) = self.max_epoch {

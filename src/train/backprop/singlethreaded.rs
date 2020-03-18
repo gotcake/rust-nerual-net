@@ -41,12 +41,14 @@ pub fn train_backprop_single_threaded(
 
         batch_num += 1;
 
+        if batch_num % 100 == 0 {
+            println!("{}: {:?}", batch_num, &error_stats);
+        }
+
         if completion_fn.should_stop_training(batch_num, stage_start_time, &error_stats) {
             return (error_stats, batch_num)
         }
 
     }
-
-    unreachable!();
-
+    // unreachable
 }

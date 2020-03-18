@@ -63,7 +63,7 @@ pub struct Net {
     weight_buffer: RowBuffer,
     input_size: usize,
     output_size: usize,
-    layers: Vec<NetLayer>,
+    layers: Box<[NetLayer]>,
     prediction_buffers: RefCell<RowBuffer>, // RefCell is needed to allow mutable borrow
 }
 
@@ -91,7 +91,7 @@ impl<'a> Net {
             weight_buffer,
             input_size,
             output_size: layers.last().unwrap().output_size(),
-            layers,
+            layers: layers.into_boxed_slice(),
             prediction_buffers: RefCell::new(RowBuffer::new_with_row_sizes(0.0, [max_output_size, max_output_size])),
         }
 
@@ -131,9 +131,9 @@ impl<'a> Net {
 
     }
 
-    pub fn predict(&mut self, input: impl AsRef<[f32]>) -> Vec<f32> {
+    pub fn predict(&mut self, input: &[f32]) -> Vec<f32> {
         let mut output = vec![0f32; self.output_size];
-        self.predict_with(input.as_ref(), output.as_mut_slice());
+        self.predict_with(input, output.as_mut_slice());
         output
     }
 
@@ -149,22 +149,19 @@ impl<'a> Net {
 
     #[inline]
     pub fn first_layer(&self) -> &NetLayer {
-        &self.layers[0]
+        // guaranteed to have at least 1 layer
+        unsafe { self.layers.get_unchecked(0) }
     }
 
     #[inline]
     pub fn last_layer(&self) -> &NetLayer {
-        &self.layers[self.layers.len() - 1]
+        // guaranteed to have at least 1 layer
+        unsafe { self.layers.get_unchecked(self.layers.len() - 1) }
     }
 
     #[inline]
     pub fn layer_iter(&self) -> slice::Iter<NetLayer> {
         self.layers.iter()
-    }
-
-    #[inline]
-    pub fn layer_iter_mut(&mut self) -> slice::IterMut<NetLayer> {
-        self.layers.iter_mut()
     }
 
     #[inline]
